@@ -22,6 +22,13 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Faca login para acessar o sistema.'
 
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Retorna JSON para chamadas AJAX, redirect para navegação normal."""
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'erro': 'Sessão expirada. Recarregue a página e faça login novamente.', 'auth': False}), 401
+    return redirect(url_for('login'))
+
 class User(UserMixin):
     def __init__(self, id, username):
         self.id = id
@@ -101,8 +108,6 @@ def gerar():
     output_path = None
     try:
         df = pd.read_excel(input_path)
-        colunas_req = ['Processador', 'Memoria RAM total', 'Armazenamento total',
-                       'Armazenamento utilizado', 'Sistema operacional', 'Nome do dispositivo']
         colunas_req = ['Processador', 'Memória RAM total', 'Armazenamento total',
                        'Armazenamento utilizado', 'Sistema operacional', 'Nome do dispositivo']
         faltando = [c for c in colunas_req if c not in df.columns]
