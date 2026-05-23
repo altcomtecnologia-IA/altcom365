@@ -60,30 +60,6 @@
     display: flex; align-items: center; gap: 20px;
   }
 
-  .header-right {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 12px;
-  }
-
-  .user-badge {
-    font-size: 0.8rem;
-    color: var(--muted);
-  }
-
-  .btn-logout {
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 8px;
-    color: var(--muted);
-    padding: 6px 14px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.82rem;
-    cursor: pointer;
-    text-decoration: none;
-    transition: border-color .2s, color .2s;
-  }
-  .btn-logout:hover { border-color: var(--cyan); color: var(--cyan); }
-
   .logo-mark {
     width: 48px; height: 48px; flex-shrink: 0;
     background: var(--cyan);
@@ -151,14 +127,9 @@
     border-color: var(--cyan);
     background: rgba(0,200,212,.06);
   }
-  /* label precisa de display block para ocupar largura total */
-  label.drop-zone { display: block; }
-  /* file input cobre toda a área da drop zone — clique direto, sem JS */
-  #fileInput {
+  .drop-zone input[type="file"] {
     position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    opacity: 0; cursor: pointer;
-    z-index: 2;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
   }
 
   .drop-icon {
@@ -365,10 +336,6 @@
       <h1>Altcom 365</h1>
       <span>Metodologia de Eficiência Técnica</span>
     </div>
-    <div class="header-right">
-      {% if username %}<span class="user-badge">{{ username }}</span>{% endif %}
-      <a href="/logout" class="btn-logout">Sair</a>
-    </div>
   </header>
 
   <!-- HERO -->
@@ -379,11 +346,8 @@
 
   <!-- UPLOAD CARD -->
   <div class="card">
-    <!-- label cobre toda a área; file input dentro cobre a label com z-index -->
-    <label class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput"
-             accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-             onchange="console.log('CHANGE EVENT',this.files);var b=document.getElementById('btnGerar');var l=document.getElementById('btnLabel');if(b&&l&&this.files&&this.files[0]){b.disabled=false;l.textContent='✓ '+this.files[0].name;window._selectedFile=this.files[0];}else{console.error('CHANGE falhou',{b:!!b,l:!!l,files:this.files});}">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -394,7 +358,7 @@
       <h3>Arraste o arquivo aqui</h3>
       <p>ou clique para selecionar &nbsp;·&nbsp; .xlsx</p>
       <div class="file-name" id="fileName"></div>
-    </label>
+    </div>
 
     <button class="btn" id="btnGerar" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -459,63 +423,29 @@ const btnDownload= document.getElementById('btnDownload');
 
 let selectedFile = null;
 
-// ── previne browser de abrir arquivo solto fora da drop zone ──────────────
-document.addEventListener('dragover', ev => ev.preventDefault());
-document.addEventListener('drop',     ev => ev.preventDefault());
-
-// ── drag & drop na drop zone ───────────────────────────────────────────────
+// ── drag & drop ────────────────────────────────────────────────────────────
 ['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => {
-  ev.preventDefault(); ev.stopPropagation();
-  dropZone.classList.add('drag-over');
+  ev.preventDefault(); dropZone.classList.add('drag-over');
 }));
-['dragleave'].forEach(e => dropZone.addEventListener(e, ev => {
-  dropZone.classList.remove('drag-over');
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.classList.remove('drag-over');
 }));
 dropZone.addEventListener('drop', ev => {
-  ev.preventDefault(); ev.stopPropagation();
-  dropZone.classList.remove('drag-over');
-  const f = ev.dataTransfer && ev.dataTransfer.files[0];
+  const f = ev.dataTransfer.files[0];
   if (f) setFile(f);
 });
-
-// ── seleção via caixa de arquivo (label nativa abre o seletor) ────────────
-// change + input para máxima compatibilidade cross-browser
-function handleFileChange() {
-  const f = fileInput.files && fileInput.files[0];
-  if (f) setFile(f);
-}
-fileInput.addEventListener('change', handleFileChange);
-fileInput.addEventListener('input',  handleFileChange);
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
 
 function setFile(f) {
-  console.log('setFile chamado:', f ? f.name : 'sem arquivo');
-  try {
-    selectedFile = f || window._selectedFile;
-    if (!selectedFile) { console.error('setFile: arquivo nulo'); return; }
-    if (fileName)   { fileName.textContent = selectedFile.name; fileName.style.display = 'inline-block'; }
-    if (btnGerar)   { btnGerar.disabled = false; }
-    if (btnLabel)   { btnLabel.textContent = 'Gerar Pré-visualização'; }
-    if (previewDiv) { previewDiv.style.display = 'none'; }
-    hideError();
-    console.log('setFile OK — botão habilitado');
-  } catch(e) {
-    console.error('setFile ERRO:', e.message, e);
-  }
-}
-
-// ── helpers AJAX ───────────────────────────────────────────────────────────
-const AJAX_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
-
-async function ajaxPost(url, file) {
-  const fd = new FormData();
-  fd.append('arquivo', file);
-  const res = await fetch(url, { method: 'POST', body: fd, headers: AJAX_HEADERS });
-  if (res.status === 401) {
-    showError('Sessão expirada. Redirecionando para o login...');
-    setTimeout(() => { window.location.href = '/login'; }, 1500);
-    throw new Error('auth');
-  }
-  return res;
+  selectedFile = f;
+  fileName.textContent = f.name;
+  fileName.style.display = 'inline-block';
+  btnGerar.disabled = false;
+  btnLabel.textContent = 'Gerar Pré-visualização';
+  previewDiv.style.display = 'none';
+  hideError();
 }
 
 // ── preview ────────────────────────────────────────────────────────────────
@@ -524,38 +454,43 @@ btnGerar.addEventListener('click', async () => {
   setLoading(true);
   hideError();
 
+  const fd = new FormData();
+  fd.append('arquivo', selectedFile);
+
   try {
-    const res  = await ajaxPost('/preview', selectedFile);
+    const res = await fetch('/preview', { method: 'POST', body: fd });
     const data = await res.json();
 
-    if (data.erro) { showError(data.erro); return; }
+    if (data.erro) { showError(data.erro); setLoading(false); return; }
 
     renderPreview(data);
     previewDiv.style.display = 'block';
     btnLabel.textContent = 'Atualizar';
   } catch (e) {
-    if (e.message !== 'auth') showError('Erro de comunicação com o servidor. Tente novamente.');
-    console.error('preview error:', e);
-  } finally {
-    setLoading(false);
+    showError('Erro de comunicação com o servidor.');
   }
+  setLoading(false);
 });
 
 // ── download ───────────────────────────────────────────────────────────────
 btnDownload.addEventListener('click', async () => {
   if (!selectedFile) return;
   btnDownload.disabled = true;
-  hideError();
+  btnDownload.querySelector('span') && (btnDownload.querySelector('span').textContent = 'Gerando...');
+
+  const fd = new FormData();
+  fd.append('arquivo', selectedFile);
 
   try {
-    const res = await ajaxPost('/gerar', selectedFile);
+    const res = await fetch('/gerar', { method: 'POST', body: fd });
     if (!res.ok) {
       const j = await res.json();
       showError(j.erro || 'Erro ao gerar o laudo.');
+      btnDownload.disabled = false;
       return;
     }
-    const blob  = await res.blob();
-    const cd    = res.headers.get('Content-Disposition') || '';
+    const blob = await res.blob();
+    const cd   = res.headers.get('Content-Disposition') || '';
     const match = cd.match(/filename="?([^"]+)"?/);
     const name  = match ? match[1] : 'Laudo_Eficiencia.xlsx';
     const url   = URL.createObjectURL(blob);
@@ -563,11 +498,84 @@ btnDownload.addEventListener('click', async () => {
     a.href = url; a.download = name; a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
-    if (e.message !== 'auth') showError('Erro ao baixar o arquivo. Tente novamente.');
-    console.error('download error:', e);
-  } finally {
-    btnDownload.disabled = false;
+    showError('Erro ao baixar o arquivo.');
   }
+  btnDownload.disabled = false;
 });
 
-// ── render preview ───────────────────────────────────────�
+// ── render preview ─────────────────────────────────────────────────────────
+function renderPreview(data) {
+  document.getElementById('previewCliente').textContent = data.cliente;
+  document.getElementById('previewTotal').textContent   = `${data.total} dispositivos`;
+
+  const container = document.getElementById('barsContainer');
+  container.innerHTML = '';
+
+  data.resumo.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+
+    // label badge
+    const lbl = document.createElement('div');
+    lbl.className = 'bar-label';
+    lbl.textContent = item.label;
+    lbl.style.background = '#' + item.bg + '22';
+    lbl.style.color = item.label === 'CRÍTICO' || item.label === 'ÓTIMO'
+      ? '#' + item.bg : '#' + item.bg;
+    lbl.style.border = '1px solid #' + item.bg + '55';
+
+    // bar
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.style.background = '#' + item.bg;
+    fill.style.width = '0%';
+    track.appendChild(fill);
+    setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
+
+    // count
+    const cnt = document.createElement('div');
+    cnt.className = 'bar-count';
+    cnt.textContent = item.qtd;
+    cnt.style.color = '#' + item.bg;
+
+    // tags
+    const tags = document.createElement('div');
+    tags.className = 'bar-tags';
+    if (item.man_prev > 0) {
+      const t = document.createElement('span');
+      t.className = 'tag mp';
+      t.textContent = `${item.man_prev} Man. Prev.`;
+      tags.appendChild(t);
+    }
+    if (item.upgrade > 0) {
+      const t = document.createElement('span');
+      t.className = 'tag upg';
+      t.textContent = `${item.upgrade} Upgrade`;
+      tags.appendChild(t);
+    }
+
+    row.appendChild(lbl);
+    row.appendChild(track);
+    row.appendChild(cnt);
+    row.appendChild(tags);
+    container.appendChild(row);
+  });
+}
+
+function setLoading(on) {
+  btnGerar.disabled = on;
+  spinner.style.display = on ? 'block' : 'none';
+  if (on) btnLabel.textContent = 'Processando...';
+}
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.style.display = 'block';
+}
+function hideError() {
+  errorMsg.style.display = 'none';
+}
+</script>
+</body>
+</html>
