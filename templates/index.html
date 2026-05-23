@@ -151,8 +151,15 @@
     border-color: var(--cyan);
     background: rgba(0,200,212,.06);
   }
-  /* file input oculto — label nativa abre o seletor */
-  #fileInput { display: none; }
+  /* label precisa de display block para ocupar largura total */
+  label.drop-zone { display: block; }
+  /* file input cobre toda a área da drop zone — clique direto, sem JS */
+  #fileInput {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+    z-index: 2;
+  }
 
   .drop-icon {
     width: 52px; height: 52px;
@@ -372,8 +379,11 @@
 
   <!-- UPLOAD CARD -->
   <div class="card">
-    <!-- label nativa: clique em qualquer lugar abre o seletor de arquivo -->
-    <label class="drop-zone" id="dropZone" for="fileInput">
+    <!-- label cobre toda a área; file input dentro cobre a label com z-index -->
+    <label class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput"
+             accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+             onchange="if(this.files&&this.files[0])setFile(this.files[0])">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -385,8 +395,6 @@
       <p>ou clique para selecionar &nbsp;·&nbsp; .xlsx</p>
       <div class="file-name" id="fileName"></div>
     </label>
-    <!-- file input fora da label para evitar conflitos -->
-    <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
 
     <button class="btn" id="btnGerar" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -573,11 +581,4 @@ function renderPreview(data) {
     lbl.className = 'bar-label';
     lbl.textContent = item.label;
     lbl.style.background = '#' + item.bg + '22';
-    lbl.style.color = item.label === 'CRÍTICO' || item.label === 'ÓTIMO'
-      ? '#' + item.bg : '#' + item.bg;
-    lbl.style.border = '1px solid #' + item.bg + '55';
-
-    // bar
-    const track = document.createElement('div');
-    track.className = 'bar-track';
-    const 
+    lbl.style.color = item.label
