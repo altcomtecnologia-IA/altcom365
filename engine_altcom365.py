@@ -214,7 +214,7 @@ def classify(row) -> pd.Series:
     pen_upgrade = []
     if win_old:       pen_upgrade.append(('so',  "Necessário fazer upgrade para Windows 11."))
     if ram < 8:       pen_upgrade.append(('ram', "Memória RAM abaixo do mínimo recomendado (8 GB)."))
-    if storage < 200: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (200 GB)."))
+    if storage < 200: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (220 GB)."))
 
     if pen_upgrade:
         sufixo = " - Upgrade"
