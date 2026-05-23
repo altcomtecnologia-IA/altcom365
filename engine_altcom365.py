@@ -3,7 +3,7 @@ Altcom 365 – Engine de Classificação de Eficiência Técnica v5
 Fonte: Tabela_de_processadores_para_laudo_de_eficiencia_2026.xlsx (revisada)
 Regras de sufixo:
   - Uso armazenamento >70%    → classif + " - Man. Prev." (cor inalterada)
-  - SO<Win11 / RAM<8 / SSD<220 → classif + " - Upgrade"   (cor inalterada)
+  - SO<Win11 / RAM<8 / SSD<200 → classif + " - Upgrade"   (cor inalterada)
   - Ambos                     → " - Upgrade" tem prioridade
 """
 import re, pandas as pd
@@ -214,7 +214,7 @@ def classify(row) -> pd.Series:
     pen_upgrade = []
     if win_old:       pen_upgrade.append(('so',  "Necessário fazer upgrade para Windows 11."))
     if ram < 8:       pen_upgrade.append(('ram', "Memória RAM abaixo do mínimo recomendado (8 GB)."))
-    if storage < 220: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (220 GB)."))
+    if storage < 200: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (200 GB)."))
 
     if pen_upgrade:
         sufixo = " - Upgrade"
