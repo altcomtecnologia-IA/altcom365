@@ -151,9 +151,8 @@
     border-color: var(--cyan);
     background: rgba(0,200,212,.06);
   }
-  .drop-zone input[type="file"] {
-    display: none;
-  }
+  /* file input oculto — label nativa abre o seletor */
+  #fileInput { display: none; }
 
   .drop-icon {
     width: 52px; height: 52px;
@@ -373,8 +372,8 @@
 
   <!-- UPLOAD CARD -->
   <div class="card">
-    <div class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <!-- label nativa: clique em qualquer lugar abre o seletor de arquivo -->
+    <label class="drop-zone" id="dropZone" for="fileInput">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -385,7 +384,9 @@
       <h3>Arraste o arquivo aqui</h3>
       <p>ou clique para selecionar &nbsp;·&nbsp; .xlsx</p>
       <div class="file-name" id="fileName"></div>
-    </div>
+    </label>
+    <!-- file input fora da label para evitar conflitos -->
+    <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
 
     <button class="btn" id="btnGerar" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -450,23 +451,27 @@ const btnDownload= document.getElementById('btnDownload');
 
 let selectedFile = null;
 
-// ── drag & drop + click ────────────────────────────────────────────────────
+// ── previne browser de abrir arquivo solto fora da drop zone ──────────────
+document.addEventListener('dragover', ev => ev.preventDefault());
+document.addEventListener('drop',     ev => ev.preventDefault());
+
+// ── drag & drop na drop zone ───────────────────────────────────────────────
 ['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => {
-  ev.preventDefault(); dropZone.classList.add('drag-over');
+  ev.preventDefault(); ev.stopPropagation();
+  dropZone.classList.add('drag-over');
 }));
-['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
-  ev.preventDefault(); dropZone.classList.remove('drag-over');
+['dragleave'].forEach(e => dropZone.addEventListener(e, ev => {
+  dropZone.classList.remove('drag-over');
 }));
 dropZone.addEventListener('drop', ev => {
-  ev.preventDefault();
-  const f = ev.dataTransfer.files[0];
+  ev.preventDefault(); ev.stopPropagation();
+  dropZone.classList.remove('drag-over');
+  const f = ev.dataTransfer && ev.dataTransfer.files[0];
   if (f) setFile(f);
 });
 
-// Clique no drop zone abre o seletor de arquivo
-dropZone.addEventListener('click', () => fileInput.click());
-
-// Detecta seleção de arquivo (change + input para máxima compatibilidade)
+// ── seleção via caixa de arquivo (label nativa abre o seletor) ────────────
+// change + input para máxima compatibilidade cross-browser
 function handleFileChange() {
   const f = fileInput.files && fileInput.files[0];
   if (f) setFile(f);
@@ -575,21 +580,4 @@ function renderPreview(data) {
     // bar
     const track = document.createElement('div');
     track.className = 'bar-track';
-    const fill = document.createElement('div');
-    fill.className = 'bar-fill';
-    fill.style.background = '#' + item.bg;
-    fill.style.width = '0%';
-    track.appendChild(fill);
-    setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
-
-    // count
-    const cnt = document.createElement('div');
-    cnt.className = 'bar-count';
-    cnt.textContent = item.qtd;
-    cnt.style.color = '#' + item.bg;
-
-    // tags
-    const tags = document.createElement('div');
-    tags.className = 'bar-tags';
-    if (item.man_prev > 0) {
-      const t = document.createElement('span');
+    const 
