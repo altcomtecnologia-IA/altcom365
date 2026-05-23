@@ -476,49 +476,59 @@ function setFile(f) {
   hideError();
 }
 
+// ── helpers AJAX ───────────────────────────────────────────────────────────
+const AJAX_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' };
+
+async function ajaxPost(url, file) {
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  const res = await fetch(url, { method: 'POST', body: fd, headers: AJAX_HEADERS });
+  if (res.status === 401) {
+    showError('Sessão expirada. Redirecionando para o login...');
+    setTimeout(() => { window.location.href = '/login'; }, 1500);
+    throw new Error('auth');
+  }
+  return res;
+}
+
 // ── preview ────────────────────────────────────────────────────────────────
 btnGerar.addEventListener('click', async () => {
   if (!selectedFile) return;
   setLoading(true);
   hideError();
 
-  const fd = new FormData();
-  fd.append('arquivo', selectedFile);
-
   try {
-    const res = await fetch('/preview', { method: 'POST', body: fd });
+    const res  = await ajaxPost('/preview', selectedFile);
     const data = await res.json();
 
-    if (data.erro) { showError(data.erro); setLoading(false); return; }
+    if (data.erro) { showError(data.erro); return; }
 
     renderPreview(data);
     previewDiv.style.display = 'block';
     btnLabel.textContent = 'Atualizar';
   } catch (e) {
-    showError('Erro de comunicação com o servidor.');
+    if (e.message !== 'auth') showError('Erro de comunicação com o servidor. Tente novamente.');
+    console.error('preview error:', e);
+  } finally {
+    setLoading(false);
   }
-  setLoading(false);
 });
 
 // ── download ───────────────────────────────────────────────────────────────
 btnDownload.addEventListener('click', async () => {
   if (!selectedFile) return;
   btnDownload.disabled = true;
-  btnDownload.querySelector('span') && (btnDownload.querySelector('span').textContent = 'Gerando...');
-
-  const fd = new FormData();
-  fd.append('arquivo', selectedFile);
+  hideError();
 
   try {
-    const res = await fetch('/gerar', { method: 'POST', body: fd });
+    const res = await ajaxPost('/gerar', selectedFile);
     if (!res.ok) {
       const j = await res.json();
       showError(j.erro || 'Erro ao gerar o laudo.');
-      btnDownload.disabled = false;
       return;
     }
-    const blob = await res.blob();
-    const cd   = res.headers.get('Content-Disposition') || '';
+    const blob  = await res.blob();
+    const cd    = res.headers.get('Content-Disposition') || '';
     const match = cd.match(/filename="?([^"]+)"?/);
     const name  = match ? match[1] : 'Laudo_Eficiencia.xlsx';
     const url   = URL.createObjectURL(blob);
@@ -526,9 +536,11 @@ btnDownload.addEventListener('click', async () => {
     a.href = url; a.download = name; a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
-    showError('Erro ao baixar o arquivo.');
+    if (e.message !== 'auth') showError('Erro ao baixar o arquivo. Tente novamente.');
+    console.error('download error:', e);
+  } finally {
+    btnDownload.disabled = false;
   }
-  btnDownload.disabled = false;
 });
 
 // ── render preview ─────────────────────────────────────────────────────────
@@ -574,4 +586,10 @@ function renderPreview(data) {
     if (item.man_prev > 0) {
       const t = document.createElement('span');
       t.className = 'tag mp';
-      t.textContent =
+      t.textContent = `${item.man_prev} Man. Prev.`;
+      tags.appendChild(t);
+    }
+    if (item.upgrade > 0) {
+      const t = document.createElement('span');
+      t.className = 'tag upg';
+      t.tex
