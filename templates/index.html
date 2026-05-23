@@ -11,22 +11,17 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --navy:    #0D1B2A;
-    --cyan:    #00C8D4;
-    --cyan-dim:#007f88;
-    --white:   #FFFFFF;
-    --off:     #F0F4F8;
-    --muted:   #8899AA;
-    --border:  #D8E2EC;
-    --excelente:  #00B0F0;
-    --otimo:      #00B050;
-    --bom:        #92D050;
-    --satisf:     #FFC000;
-    --critico:    #C00000;
+    --navy:   #0D1B2A;
+    --cyan:   #00C8D4;
+    --white:  #FFFFFF;
+    --muted:  #8899AA;
+    --satisf: #FFC000;
+    --critico:#C00000;
+    --border: #D8E2EC;
+    --zebra:  #F0F4F8;
   }
 
   html { scroll-behavior: smooth; }
-
   body {
     font-family: 'Inter', sans-serif;
     background: var(--navy);
@@ -34,7 +29,6 @@
     min-height: 100vh;
     overflow-x: hidden;
   }
-
   body::before {
     content: '';
     position: fixed; inset: 0; z-index: 0;
@@ -51,7 +45,7 @@
     padding: 0 24px 80px;
   }
 
-  /* ── HEADER ─────────────────────────────────────── */
+  /* ── HEADER ─────────────────────────────── */
   header {
     padding: 48px 0 36px;
     display: flex;
@@ -61,69 +55,23 @@
     border-bottom: 1px solid rgba(255,255,255,.07);
     margin-bottom: 40px;
   }
+  .logo-altcom  { display: flex; align-items: center; gap: 0; line-height: 1; }
+  .logo-divider { width:1px; height:36px; background:rgba(255,255,255,.2); margin:0 20px; flex-shrink:0; }
+  .logo-service { display:flex; flex-direction:column; gap:3px; }
+  .logo-service-title { font-size:15px; font-weight:600; color:var(--white); letter-spacing:-.1px; }
+  .logo-service-sub   { font-size:11px; font-weight:400; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; }
 
-  /* SVG logo container */
-  .logo-altcom {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    line-height: 1;
-  }
-
-  .logo-divider {
-    width: 1px;
-    height: 36px;
-    background: rgba(255,255,255,.2);
-    margin: 0 20px;
-    flex-shrink: 0;
-  }
-
-  .logo-service {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .logo-service-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--white);
-    letter-spacing: -.1px;
-  }
-
-  .logo-service-sub {
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--muted);
-    letter-spacing: .4px;
-    text-transform: uppercase;
-  }
-
-  /* ── HERO ────────────────────────────────────────── */
-  .hero {
-    margin-bottom: 36px;
-  }
+  /* ── HERO ────────────────────────────────── */
+  .hero { margin-bottom: 36px; }
   .hero h2 {
     font-size: clamp(26px, 4.5vw, 38px);
-    font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: -.4px;
+    font-weight: 700; line-height: 1.15; letter-spacing: -.4px;
     margin-bottom: 10px;
-    color: var(--white);
   }
-  .hero h2 em {
-    font-style: normal;
-    color: var(--cyan);
-  }
-  .hero p {
-    font-size: 14px;
-    font-weight: 400;
-    color: var(--muted);
-    line-height: 1.65;
-    max-width: 520px;
-  }
+  .hero h2 em { font-style:normal; color:var(--cyan); }
+  .hero p { font-size:14px; font-weight:400; color:var(--muted); line-height:1.65; max-width:520px; }
 
-  /* ── UPLOAD CARD ─────────────────────────────────── */
+  /* ── CARD ────────────────────────────────── */
   .card {
     background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.09);
@@ -132,6 +80,7 @@
     backdrop-filter: blur(10px);
   }
 
+  /* ── DROP ZONE ───────────────────────────── */
   .drop-zone {
     border: 2px dashed rgba(0,200,212,.3);
     border-radius: 12px;
@@ -141,220 +90,230 @@
     transition: border-color .2s, background .2s;
     position: relative;
   }
-  .drop-zone:hover,
-  .drop-zone.drag-over {
+  .drop-zone:hover, .drop-zone.drag-over {
     border-color: var(--cyan);
     background: rgba(0,200,212,.05);
   }
   .drop-zone input[type="file"] {
-    position: absolute; inset: 0;
-    opacity: 0; cursor: pointer;
-    width: 100%; height: 100%;
+    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
   }
-
   .drop-icon {
-    width: 48px; height: 48px;
-    background: rgba(0,200,212,.1);
-    border-radius: 12px;
-    display: inline-grid; place-items: center;
-    margin-bottom: 14px;
+    width:48px; height:48px;
+    background:rgba(0,200,212,.1); border-radius:12px;
+    display:inline-grid; place-items:center; margin-bottom:14px;
   }
-  .drop-icon svg { width: 22px; height: 22px; color: var(--cyan); }
-
-  .drop-zone h3 {
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: var(--white);
-  }
-  .drop-zone p {
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .drop-zone .file-name {
-    display: none;
-    margin-top: 12px;
-    padding: 7px 14px;
-    background: rgba(0,200,212,.1);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--cyan);
+  .drop-icon svg { width:22px; height:22px; color:var(--cyan); }
+  .drop-zone h3  { font-size:15px; font-weight:600; margin-bottom:5px; }
+  .drop-zone p   { font-size:13px; color:var(--muted); }
+  .file-name {
+    display:none; margin-top:12px; padding:7px 14px;
+    background:rgba(0,200,212,.1); border-radius:8px;
+    font-size:13px; font-weight:500; color:var(--cyan);
   }
 
-  /* ── BUTTON ──────────────────────────────────────── */
+  /* ── BOTOES ──────────────────────────────── */
   .btn {
-    display: inline-flex; align-items: center; gap: 10px;
-    background: var(--cyan);
-    color: var(--navy);
-    font-family: 'Inter', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    padding: 13px 28px;
-    border-radius: 10px;
-    border: none; cursor: pointer;
-    transition: opacity .2s, transform .1s;
-    text-decoration: none;
-    margin-top: 20px;
-    width: 100%;
-    justify-content: center;
-    letter-spacing: .1px;
+    display:inline-flex; align-items:center; gap:10px;
+    background:var(--cyan); color:var(--navy);
+    font-family:'Inter',sans-serif; font-size:14px; font-weight:700;
+    padding:13px 28px; border-radius:10px; border:none; cursor:pointer;
+    transition:opacity .2s, transform .1s;
+    text-decoration:none; width:100%; justify-content:center; letter-spacing:.1px;
+    margin-top:20px;
   }
-  .btn:hover   { opacity: .88; }
-  .btn:active  { transform: scale(.98); }
-  .btn:disabled { opacity: .3; cursor: not-allowed; }
-  .btn svg { width: 16px; height: 16px; }
+  .btn:hover  { opacity:.88; }
+  .btn:active { transform:scale(.98); }
+  .btn:disabled { opacity:.3; cursor:not-allowed; }
+  .btn svg { width:16px; height:16px; }
 
-  /* ── SPINNER ─────────────────────────────────────── */
+  .btn-download {
+    background:transparent; color:var(--cyan);
+    border:2px solid var(--cyan);
+  }
+  .btn-download:hover { background:rgba(0,200,212,.07); opacity:1; }
+
+  .btn-interno {
+    background:transparent; color:#60A5FA;
+    border:2px solid #60A5FA;
+    margin-top:12px;
+  }
+  .btn-interno:hover { background:rgba(96,165,250,.07); opacity:1; }
+
+  /* ── SPINNER ─────────────────────────────── */
   .spinner {
-    display: none;
-    width: 16px; height: 16px;
-    border: 2px solid rgba(13,27,42,.25);
-    border-top-color: var(--navy);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
+    display:none; width:16px; height:16px;
+    border:2px solid rgba(13,27,42,.25); border-top-color:var(--navy);
+    border-radius:50%; animation:spin .7s linear infinite;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* ── PREVIEW ─────────────────────────────────────── */
+  /* ── PREVIEW CONTAINER ───────────────────── */
   #preview {
-    display: none;
-    margin-top: 24px;
-    animation: fadeUp .35s ease both;
+    display:none; margin-top:24px;
+    animation:fadeUp .35s ease both;
   }
   @keyframes fadeUp {
-    from { opacity:0; transform: translateY(10px); }
-    to   { opacity:1; transform: translateY(0); }
+    from { opacity:0; transform:translateY(10px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── BLOCO CLIENTE ───────────────────────── */
+  .preview-block {
+    margin-bottom: 0;
+  }
+  .preview-block + .preview-block {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,.07);
+  }
+
+  .preview-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
   }
 
   .preview-header {
-    display: flex; align-items: baseline; gap: 10px;
+    display:flex; align-items:baseline; gap:10px;
     margin-bottom: 16px;
   }
-  .preview-header h3 {
-    font-size: 16px;
-    font-weight: 600;
-  }
-  .preview-header .total {
-    font-size: 13px;
-    color: var(--muted);
-  }
+  .preview-header h3 { font-size:16px; font-weight:600; }
+  .preview-header .total { font-size:13px; color:var(--muted); }
 
-  .bars { display: flex; flex-direction: column; gap: 9px; }
-
+  /* ── BARRAS CLIENTE ──────────────────────── */
+  .bars { display:flex; flex-direction:column; gap:9px; }
   .bar-row {
-    display: grid;
-    grid-template-columns: 130px 1fr 50px 84px;
-    align-items: center;
-    gap: 12px;
+    display:grid;
+    grid-template-columns:130px 1fr 50px 84px;
+    align-items:center; gap:12px;
   }
-
   .bar-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .3px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    text-align: center;
-    white-space: nowrap;
+    font-size:11px; font-weight:700; letter-spacing:.3px;
+    padding:4px 10px; border-radius:6px;
+    text-align:center; white-space:nowrap;
   }
-
   .bar-track {
-    height: 7px;
-    background: rgba(255,255,255,.07);
-    border-radius: 999px;
-    overflow: hidden;
+    height:7px; background:rgba(255,255,255,.07);
+    border-radius:999px; overflow:hidden;
   }
   .bar-fill {
-    height: 100%;
-    border-radius: 999px;
-    transition: width .55s cubic-bezier(.4,0,.2,1);
+    height:100%; border-radius:999px;
+    transition:width .55s cubic-bezier(.4,0,.2,1);
   }
+  .bar-count { font-size:19px; font-weight:800; text-align:right; }
+  .bar-tags  { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+  .tag { font-size:10px; font-weight:600; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+  .tag.mp  { background:rgba(0,200,212,.14); color:var(--cyan); }
+  .tag.upg { background:rgba(255,192,0,.14);  color:var(--satisf); }
 
-  .bar-count {
-    font-size: 19px;
-    font-weight: 800;
-    text-align: right;
-  }
-
-  .bar-tags {
-    display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;
-  }
-  .tag {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
-  .tag.mp  { background: rgba(0,200,212,.14); color: var(--cyan); }
-  .tag.upg { background: rgba(255,192,0,.14);  color: var(--satisf); }
-
-  /* ── DOWNLOAD BTN ────────────────────────────────── */
-  .btn-download {
-    background: transparent;
-    color: var(--cyan);
-    border: 2px solid var(--cyan);
-  }
-  .btn-download:hover { background: rgba(0,200,212,.07); opacity: 1; }
-
-  /* ── ERROR ───────────────────────────────────────── */
-  #error-msg {
-    display: none;
-    margin-top: 14px;
-    padding: 13px 16px;
-    background: rgba(192,0,0,.12);
-    border: 1px solid rgba(192,0,0,.35);
-    border-radius: 8px;
-    font-size: 13px;
-    color: #ff9999;
-    animation: fadeUp .3s ease both;
-  }
-
-  /* ── STEPS ───────────────────────────────────────── */
-  .steps {
+  /* ── BLOCO ALERTAS INTERNOS ──────────────── */
+  .alerts-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-top: 36px;
-  }
-  .step {
-    background: rgba(255,255,255,.03);
-    border: 1px solid rgba(255,255,255,.06);
-    border-radius: 12px;
-    padding: 20px 18px;
-  }
-  .step-num {
-    font-size: 28px;
-    font-weight: 800;
-    color: rgba(0,200,212,.25);
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-  .step h4 {
-    font-size: 13px;
-    font-weight: 600;
+    gap: 12px;
     margin-bottom: 4px;
   }
-  .step p { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-  @media (max-width: 600px) {
-    .steps { grid-template-columns: 1fr; }
-    .bar-row { grid-template-columns: 110px 1fr 36px; }
-    .bar-tags { display: none; }
-    .card { padding: 20px; }
-    .logo-divider { margin: 0 14px; height: 28px; }
+  .alert-card {
+    border-radius: 10px;
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid;
+  }
+
+  .alert-card.armazenamento {
+    background: rgba(156,0,6,.1);
+    border-color: rgba(156,0,6,.3);
+  }
+  .alert-card.windows {
+    background: rgba(127,96,0,.1);
+    border-color: rgba(127,96,0,.3);
+  }
+  .alert-card.milvus {
+    background: rgba(31,78,121,.15);
+    border-color: rgba(96,165,250,.25);
+  }
+  .alert-card.milvus-off {
+    background: rgba(255,255,255,.03);
+    border-color: rgba(255,255,255,.06);
+    opacity: .5;
+  }
+
+  .alert-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .alert-card.armazenamento .alert-icon { background: rgba(156,0,6,.25); }
+  .alert-card.windows       .alert-icon { background: rgba(255,192,0,.2); }
+  .alert-card.milvus        .alert-icon { background: rgba(96,165,250,.2); }
+  .alert-card.milvus-off    .alert-icon { background: rgba(255,255,255,.06); }
+
+  .alert-count {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-top: 4px;
+  }
+  .alert-card.armazenamento .alert-count { color: #FF9999; }
+  .alert-card.windows       .alert-count { color: #FFD966; }
+  .alert-card.milvus        .alert-count { color: #93C5FD; }
+  .alert-card.milvus-off    .alert-count { color: var(--muted); }
+
+  .alert-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .2px;
+    color: var(--white);
+  }
+  .alert-sub {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* ── ERROR ───────────────────────────────── */
+  #error-msg {
+    display:none; margin-top:14px; padding:13px 16px;
+    background:rgba(192,0,0,.12); border:1px solid rgba(192,0,0,.35);
+    border-radius:8px; font-size:13px; color:#ff9999;
+    animation:fadeUp .3s ease both;
+  }
+
+  /* ── STEPS ───────────────────────────────── */
+  .steps {
+    display:grid; grid-template-columns:repeat(3,1fr);
+    gap:14px; margin-top:36px;
+  }
+  .step {
+    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
+    border-radius:12px; padding:20px 18px;
+  }
+  .step-num { font-size:28px; font-weight:800; color:rgba(0,200,212,.25); line-height:1; margin-bottom:8px; }
+  .step h4  { font-size:13px; font-weight:600; margin-bottom:4px; }
+  .step p   { font-size:12px; color:var(--muted); line-height:1.5; }
+
+  @media (max-width:600px) {
+    .steps         { grid-template-columns:1fr; }
+    .bar-row       { grid-template-columns:110px 1fr 36px; }
+    .bar-tags      { display:none; }
+    .card          { padding:20px; }
+    .logo-divider  { margin:0 14px; height:28px; }
+    .alerts-grid   { grid-template-columns:1fr; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- HEADER -->
   <header>
     <div class="logo-altcom">
-
-      <!-- Logo Altcom: ícone "A" + wordmark -->
       <svg width="148" height="40" viewBox="0 0 148 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="orbGrad" x1="0" y1="0" x2="1" y2="1">
@@ -362,37 +321,26 @@
             <stop offset="100%" stop-color="#0098A0"/>
           </linearGradient>
         </defs>
-        <!-- círculo gradiente -->
         <circle cx="20" cy="20" r="19" fill="url(#orbGrad)"/>
-        <!-- A chevron branco -->
         <path d="M11 27 L20 10 L29 27" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         <path d="M14.5 21.5 L25.5 21.5" stroke="white" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-        <!-- Notch / seta para baixo no topo do A -->
         <path d="M20 10 L17.5 15.5 L20 13.5 L22.5 15.5 Z" fill="white" opacity=".9"/>
-
-        <!-- wordmark ALTCOM -->
         <text x="46" y="16" font-family="Inter,sans-serif" font-size="13" font-weight="800" fill="#00C8D4" letter-spacing="1.5">ALTCOM</text>
-        <!-- sub TECNOLOGIA -->
         <text x="46" y="31" font-family="Inter,sans-serif" font-size="9.5" font-weight="500" fill="#8899AA" letter-spacing="2.8">TECNOLOGIA</text>
       </svg>
-
       <div class="logo-divider"></div>
-
       <div class="logo-service">
         <span class="logo-service-title">Laudo de Eficiência Técnica</span>
         <span class="logo-service-sub">Altcom Tecnologia</span>
       </div>
-
     </div>
   </header>
 
-  <!-- HERO -->
   <div class="hero">
     <h2>Análise completa do<br>parque de <em>estações de trabalho</em></h2>
     <p>Importe o export analítico do Milvus. Em segundos o laudo é gerado com classificação, diagnóstico e recomendações de upgrade por dispositivo.</p>
   </div>
 
-  <!-- UPLOAD CARD -->
   <div class="card">
     <div class="drop-zone" id="dropZone">
       <input type="file" id="fileInput" accept=".xlsx,.xls">
@@ -419,24 +367,89 @@
 
     <div id="error-msg"></div>
 
+    <!-- PREVIEW ─────────────────────────────────────────── -->
     <div id="preview">
-      <div class="preview-header">
-        <h3 id="previewCliente">—</h3>
-        <span class="total" id="previewTotal"></span>
+
+      <!-- Bloco 1: Resumo para o Cliente -->
+      <div class="preview-block">
+        <div class="preview-label">Resumo para o Cliente</div>
+        <div class="preview-header">
+          <h3 id="previewCliente">—</h3>
+          <span class="total" id="previewTotal"></span>
+        </div>
+        <div class="bars" id="barsContainer"></div>
+
+        <button class="btn btn-download" id="btnDownload" style="margin-top:18px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span id="lblDownload">Baixar Laudo — Cliente</span>
+        </button>
       </div>
-      <div class="bars" id="barsContainer"></div>
-      <button class="btn btn-download" id="btnDownload" style="margin-top:18px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span>Baixar Laudo Excel</span>
-      </button>
-    </div>
+
+      <!-- Bloco 2: Alertas Internos -->
+      <div class="preview-block" id="blockAlertas">
+        <div class="preview-label">Alertas Internos — Analistas</div>
+
+        <div class="alerts-grid">
+          <!-- Armazenamento crítico -->
+          <div class="alert-card armazenamento">
+            <div class="alert-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF9999" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+              </svg>
+            </div>
+            <div class="alert-count" id="countArmazenamento">—</div>
+            <div class="alert-title">Armazenamento crítico</div>
+            <div class="alert-sub">Uso acima de 70%</div>
+          </div>
+
+          <!-- Windows desatualizado -->
+          <div class="alert-card windows">
+            <div class="alert-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD966" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="8" height="8"/>
+                <rect x="13" y="3" width="8" height="8"/>
+                <rect x="3" y="13" width="8" height="8"/>
+                <rect x="13" y="13" width="8" height="8"/>
+              </svg>
+            </div>
+            <div class="alert-count" id="countWindows">—</div>
+            <div class="alert-title">Windows desatualizado</div>
+            <div class="alert-sub">S.O. anterior ao Win 11</div>
+          </div>
+
+          <!-- Agente Milvus -->
+          <div class="alert-card" id="cardMilvus">
+            <div class="alert-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#93C5FD" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div class="alert-count" id="countMilvus">—</div>
+            <div class="alert-title">Agente Milvus</div>
+            <div class="alert-sub" id="subMilvus">Sem contato há mais de 40 dias</div>
+          </div>
+        </div>
+
+        <button class="btn btn-interno" id="btnInterno" style="margin-top:18px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span id="lblInterno">Baixar Relatório Interno — Altcom</span>
+        </button>
+      </div>
+
+    </div><!-- /preview -->
   </div>
 
-  <!-- STEPS -->
   <div class="steps">
     <div class="step">
       <div class="step-num">01</div>
@@ -450,27 +463,28 @@
     </div>
     <div class="step">
       <div class="step-num">03</div>
-      <h4>Baixe o laudo</h4>
-      <p>Excel com 3 abas: Laudo, Resumo Executivo e Legenda</p>
+      <h4>Baixe os laudos</h4>
+      <p>Laudo do Cliente + Relatório Interno com alertas operacionais</p>
     </div>
   </div>
 
 </div>
 
 <script>
-const dropZone   = document.getElementById('dropZone');
-const fileInput  = document.getElementById('fileInput');
-const btnGerar   = document.getElementById('btnGerar');
-const btnLabel   = document.getElementById('btnLabel');
-const spinner    = document.getElementById('spinner');
-const fileName   = document.getElementById('fileName');
-const previewDiv = document.getElementById('preview');
-const errorMsg   = document.getElementById('error-msg');
-const btnDownload= document.getElementById('btnDownload');
+const dropZone    = document.getElementById('dropZone');
+const fileInput   = document.getElementById('fileInput');
+const btnGerar    = document.getElementById('btnGerar');
+const btnLabel    = document.getElementById('btnLabel');
+const spinner     = document.getElementById('spinner');
+const fileName    = document.getElementById('fileName');
+const previewDiv  = document.getElementById('preview');
+const errorMsg    = document.getElementById('error-msg');
+const btnDownload = document.getElementById('btnDownload');
+const btnInterno  = document.getElementById('btnInterno');
 
 let selectedFile = null;
 
-// ── drag & drop ────────────────────────────────────────────────────────────
+// Drag & drop
 ['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => {
   ev.preventDefault(); dropZone.classList.add('drag-over');
 }));
@@ -495,15 +509,14 @@ function setFile(f) {
   hideError();
 }
 
-// ── preview ────────────────────────────────────────────────────────────────
+// Preview
 btnGerar.addEventListener('click', async () => {
   if (!selectedFile) return;
-  setLoading(true);
-  hideError();
+  setLoading(true); hideError();
   const fd = new FormData();
   fd.append('arquivo', selectedFile);
   try {
-    const res  = await fetch('/preview', { method: 'POST', body: fd });
+    const res  = await fetch('/preview', { method:'POST', body:fd });
     const data = await res.json();
     if (data.erro) { showError(data.erro); setLoading(false); return; }
     renderPreview(data);
@@ -515,53 +528,62 @@ btnGerar.addEventListener('click', async () => {
   setLoading(false);
 });
 
-// ── download ───────────────────────────────────────────────────────────────
-btnDownload.addEventListener('click', async () => {
+// Download laudo cliente
+btnDownload.addEventListener('click', () => downloadFile('/gerar', 'lblDownload', 'Baixar Laudo — Cliente'));
+
+// Download relatório interno
+btnInterno.addEventListener('click', () => downloadFile('/gerar/interno', 'lblInterno', 'Baixar Relatório Interno — Altcom'));
+
+async function downloadFile(url, lblId, lblDefault) {
   if (!selectedFile) return;
-  btnDownload.disabled = true;
-  const spanDl = btnDownload.querySelector('span');
-  if (spanDl) spanDl.textContent = 'Gerando...';
+  const lbl = document.getElementById(lblId);
+  const btn = lblId === 'lblDownload' ? btnDownload : btnInterno;
+  btn.disabled = true;
+  if (lbl) lbl.textContent = 'Gerando...';
   const fd = new FormData();
   fd.append('arquivo', selectedFile);
   try {
-    const res = await fetch('/gerar', { method: 'POST', body: fd });
+    const res = await fetch(url, { method:'POST', body:fd });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      showError(j.erro || 'Erro ao gerar o laudo.');
-      btnDownload.disabled = false;
-      if (spanDl) spanDl.textContent = 'Baixar Laudo Excel';
+      showError(j.erro || 'Erro ao gerar o arquivo.');
+      btn.disabled = false;
+      if (lbl) lbl.textContent = lblDefault;
       return;
     }
     const blob  = await res.blob();
     const cd    = res.headers.get('Content-Disposition') || '';
     const match = cd.match(/filename="?([^"]+)"?/);
-    const name  = match ? match[1] : 'Laudo_Eficiencia.xlsx';
-    const url   = URL.createObjectURL(blob);
+    const name  = match ? match[1] : 'Altcom_Export.xlsx';
     const a     = document.createElement('a');
-    a.href = url; a.download = name; a.click();
-    URL.revokeObjectURL(url);
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    URL.revokeObjectURL(a.href);
   } catch (e) {
     showError('Erro ao baixar o arquivo.');
   }
-  btnDownload.disabled = false;
-  if (spanDl) spanDl.textContent = 'Baixar Laudo Excel';
-});
+  btn.disabled = false;
+  if (lbl) lbl.textContent = lblDefault;
+}
 
-// ── render preview ─────────────────────────────────────────────────────────
+// Render preview
 function renderPreview(data) {
   document.getElementById('previewCliente').textContent = data.cliente;
   document.getElementById('previewTotal').textContent   = data.total + ' dispositivos';
+
+  // Barras cliente
   const container = document.getElementById('barsContainer');
   container.innerHTML = '';
   data.resumo.forEach(item => {
     const row = document.createElement('div');
     row.className = 'bar-row';
+
     const lbl = document.createElement('div');
     lbl.className = 'bar-label';
     lbl.textContent = item.label;
     lbl.style.background = '#' + item.bg + '20';
     lbl.style.color = '#' + item.bg;
     lbl.style.border = '1px solid #' + item.bg + '50';
+
     const track = document.createElement('div');
     track.className = 'bar-track';
     const fill = document.createElement('div');
@@ -570,10 +592,12 @@ function renderPreview(data) {
     fill.style.width = '0%';
     track.appendChild(fill);
     setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
+
     const cnt = document.createElement('div');
     cnt.className = 'bar-count';
     cnt.textContent = item.qtd;
     cnt.style.color = '#' + item.bg;
+
     const tags = document.createElement('div');
     tags.className = 'bar-tags';
     if (item.man_prev > 0) {
@@ -592,6 +616,21 @@ function renderPreview(data) {
     row.appendChild(cnt); row.appendChild(tags);
     container.appendChild(row);
   });
+
+  // Alertas internos
+  const al = data.alertas || {};
+  document.getElementById('countArmazenamento').textContent = al.armazenamento ?? 0;
+  document.getElementById('countWindows').textContent       = al.windows       ?? 0;
+  document.getElementById('countMilvus').textContent        = al.milvus        ?? 0;
+
+  const cardMilvus = document.getElementById('cardMilvus');
+  if (!al.tem_milvus) {
+    cardMilvus.className = 'alert-card milvus-off';
+    document.getElementById('subMilvus').textContent = 'Coluna não disponível no arquivo';
+  } else {
+    cardMilvus.className = 'alert-card milvus';
+    document.getElementById('subMilvus').textContent = 'Sem contato há mais de 40 dias';
+  }
 }
 
 function setLoading(on) {
