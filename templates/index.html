@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Altcom 365 · Laudo de Eficiência Técnica</title>
+<title>Laudo de Eficiência Técnica · Altcom Tecnologia</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -18,7 +18,6 @@
     --off:     #F0F4F8;
     --muted:   #8899AA;
     --border:  #D8E2EC;
-
     --excelente:  #00B0F0;
     --otimo:      #00B050;
     --bom:        #92D050;
@@ -29,24 +28,22 @@
   html { scroll-behavior: smooth; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     background: var(--navy);
     color: var(--white);
     min-height: 100vh;
     overflow-x: hidden;
   }
 
-  /* ── BACKGROUND TEXTURE ─────────────────────────── */
   body::before {
     content: '';
     position: fixed; inset: 0; z-index: 0;
     background:
-      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,200,212,.08) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,176,80,.06) 0%, transparent 60%);
+      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,200,212,.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,176,80,.05) 0%, transparent 60%);
     pointer-events: none;
   }
 
-  /* ── LAYOUT ─────────────────────────────────────── */
   .wrap {
     position: relative; z-index: 1;
     max-width: 860px;
@@ -56,51 +53,73 @@
 
   /* ── HEADER ─────────────────────────────────────── */
   header {
-    padding: 52px 0 40px;
-    display: flex; align-items: center; gap: 20px;
+    padding: 48px 0 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    margin-bottom: 40px;
   }
 
-  .logo-mark {
-    width: 48px; height: 48px; flex-shrink: 0;
-    background: var(--cyan);
-    border-radius: 12px;
-    display: grid; place-items: center;
-  }
-  .logo-mark svg { width: 26px; height: 26px; }
-
-  .logo-text h1 {
-    font-family: 'Syne', sans-serif;
-    font-size: 22px; font-weight: 800;
-    letter-spacing: -.3px;
+  /* SVG logo container */
+  .logo-altcom {
+    display: flex;
+    align-items: center;
+    gap: 0;
     line-height: 1;
   }
-  .logo-text span {
-    font-size: 12px; font-weight: 400;
+
+  .logo-divider {
+    width: 1px;
+    height: 36px;
+    background: rgba(255,255,255,.2);
+    margin: 0 20px;
+    flex-shrink: 0;
+  }
+
+  .logo-service {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .logo-service-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--white);
+    letter-spacing: -.1px;
+  }
+
+  .logo-service-sub {
+    font-size: 11px;
+    font-weight: 400;
     color: var(--muted);
-    letter-spacing: .6px;
+    letter-spacing: .4px;
     text-transform: uppercase;
   }
 
-  /* ── HERO COPY ───────────────────────────────────── */
+  /* ── HERO ────────────────────────────────────────── */
   .hero {
-    margin-bottom: 40px;
+    margin-bottom: 36px;
   }
   .hero h2 {
-    font-family: 'Syne', sans-serif;
-    font-size: clamp(28px, 5vw, 42px);
-    font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -.5px;
-    margin-bottom: 12px;
+    font-size: clamp(26px, 4.5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -.4px;
+    margin-bottom: 10px;
+    color: var(--white);
   }
   .hero h2 em {
     font-style: normal;
     color: var(--cyan);
   }
   .hero p {
-    font-size: 15px;
+    font-size: 14px;
+    font-weight: 400;
     color: var(--muted);
-    line-height: 1.6;
+    line-height: 1.65;
     max-width: 520px;
   }
 
@@ -108,15 +127,15 @@
   .card {
     background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.09);
-    border-radius: 20px;
-    padding: 36px;
-    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 32px;
+    backdrop-filter: blur(10px);
   }
 
   .drop-zone {
-    border: 2px dashed rgba(0,200,212,.35);
-    border-radius: 14px;
-    padding: 48px 24px;
+    border: 2px dashed rgba(0,200,212,.3);
+    border-radius: 12px;
+    padding: 44px 24px;
     text-align: center;
     cursor: pointer;
     transition: border-color .2s, background .2s;
@@ -125,110 +144,115 @@
   .drop-zone:hover,
   .drop-zone.drag-over {
     border-color: var(--cyan);
-    background: rgba(0,200,212,.06);
+    background: rgba(0,200,212,.05);
   }
   .drop-zone input[type="file"] {
     position: absolute; inset: 0;
-    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
   }
 
   .drop-icon {
-    width: 52px; height: 52px;
-    background: rgba(0,200,212,.12);
-    border-radius: 14px;
+    width: 48px; height: 48px;
+    background: rgba(0,200,212,.1);
+    border-radius: 12px;
     display: inline-grid; place-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
   }
-  .drop-icon svg { width: 24px; height: 24px; color: var(--cyan); }
+  .drop-icon svg { width: 22px; height: 22px; color: var(--cyan); }
 
   .drop-zone h3 {
-    font-family: 'Syne', sans-serif;
-    font-size: 16px; font-weight: 700;
-    margin-bottom: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: var(--white);
   }
   .drop-zone p {
-    font-size: 13px; color: var(--muted);
+    font-size: 13px;
+    color: var(--muted);
   }
   .drop-zone .file-name {
     display: none;
-    margin-top: 14px;
-    padding: 8px 16px;
-    background: rgba(0,200,212,.12);
+    margin-top: 12px;
+    padding: 7px 14px;
+    background: rgba(0,200,212,.1);
     border-radius: 8px;
     font-size: 13px;
-    color: var(--cyan);
     font-weight: 500;
+    color: var(--cyan);
   }
 
-  /* ── BTN ─────────────────────────────────────────── */
+  /* ── BUTTON ──────────────────────────────────────── */
   .btn {
     display: inline-flex; align-items: center; gap: 10px;
     background: var(--cyan);
     color: var(--navy);
-    font-family: 'Syne', sans-serif;
-    font-size: 15px; font-weight: 700;
-    padding: 14px 28px;
-    border-radius: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 13px 28px;
+    border-radius: 10px;
     border: none; cursor: pointer;
     transition: opacity .2s, transform .1s;
     text-decoration: none;
-    margin-top: 24px;
+    margin-top: 20px;
     width: 100%;
     justify-content: center;
+    letter-spacing: .1px;
   }
-  .btn:hover   { opacity: .9; }
+  .btn:hover   { opacity: .88; }
   .btn:active  { transform: scale(.98); }
-  .btn:disabled {
-    opacity: .35; cursor: not-allowed;
-  }
-  .btn svg { width: 18px; height: 18px; }
+  .btn:disabled { opacity: .3; cursor: not-allowed; }
+  .btn svg { width: 16px; height: 16px; }
 
   /* ── SPINNER ─────────────────────────────────────── */
   .spinner {
     display: none;
-    width: 18px; height: 18px;
-    border: 2px solid rgba(13,27,42,.3);
+    width: 16px; height: 16px;
+    border: 2px solid rgba(13,27,42,.25);
     border-top-color: var(--navy);
     border-radius: 50%;
     animation: spin .7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── PREVIEW PANEL ───────────────────────────────── */
+  /* ── PREVIEW ─────────────────────────────────────── */
   #preview {
     display: none;
-    margin-top: 28px;
-    animation: fadeUp .4s ease both;
+    margin-top: 24px;
+    animation: fadeUp .35s ease both;
   }
   @keyframes fadeUp {
-    from { opacity:0; transform: translateY(12px); }
+    from { opacity:0; transform: translateY(10px); }
     to   { opacity:1; transform: translateY(0); }
   }
 
   .preview-header {
     display: flex; align-items: baseline; gap: 10px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
   .preview-header h3 {
-    font-family: 'Syne', sans-serif;
-    font-size: 18px; font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
   }
   .preview-header .total {
-    font-size: 13px; color: var(--muted);
+    font-size: 13px;
+    color: var(--muted);
   }
 
-  .bars { display: flex; flex-direction: column; gap: 10px; }
+  .bars { display: flex; flex-direction: column; gap: 9px; }
 
   .bar-row {
     display: grid;
-    grid-template-columns: 130px 1fr 54px 80px;
+    grid-template-columns: 130px 1fr 50px 84px;
     align-items: center;
     gap: 12px;
   }
 
   .bar-label {
-    font-size: 11px; font-weight: 700;
-    letter-spacing: .4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .3px;
     padding: 4px 10px;
     border-radius: 6px;
     text-align: center;
@@ -236,7 +260,7 @@
   }
 
   .bar-track {
-    height: 8px;
+    height: 7px;
     background: rgba(255,255,255,.07);
     border-radius: 999px;
     overflow: hidden;
@@ -244,12 +268,12 @@
   .bar-fill {
     height: 100%;
     border-radius: 999px;
-    transition: width .6s cubic-bezier(.4,0,.2,1);
+    transition: width .55s cubic-bezier(.4,0,.2,1);
   }
 
   .bar-count {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px; font-weight: 800;
+    font-size: 19px;
+    font-weight: 800;
     text-align: right;
   }
 
@@ -257,68 +281,69 @@
     display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;
   }
   .tag {
-    font-size: 10px; font-weight: 600;
+    font-size: 10px;
+    font-weight: 600;
     padding: 2px 7px;
     border-radius: 999px;
     white-space: nowrap;
   }
-  .tag.mp  { background: rgba(0,200,212,.15); color: var(--cyan); }
-  .tag.upg { background: rgba(255,192,0,.15);  color: var(--satisf); }
+  .tag.mp  { background: rgba(0,200,212,.14); color: var(--cyan); }
+  .tag.upg { background: rgba(255,192,0,.14);  color: var(--satisf); }
 
   /* ── DOWNLOAD BTN ────────────────────────────────── */
   .btn-download {
-    background: var(--navy);
+    background: transparent;
     color: var(--cyan);
     border: 2px solid var(--cyan);
   }
-  .btn-download:hover { background: rgba(0,200,212,.08); opacity: 1; }
+  .btn-download:hover { background: rgba(0,200,212,.07); opacity: 1; }
 
   /* ── ERROR ───────────────────────────────────────── */
   #error-msg {
     display: none;
-    margin-top: 16px;
-    padding: 14px 18px;
-    background: rgba(192,0,0,.15);
-    border: 1px solid rgba(192,0,0,.4);
-    border-radius: 10px;
+    margin-top: 14px;
+    padding: 13px 16px;
+    background: rgba(192,0,0,.12);
+    border: 1px solid rgba(192,0,0,.35);
+    border-radius: 8px;
     font-size: 13px;
     color: #ff9999;
     animation: fadeUp .3s ease both;
   }
 
-  /* ── FOOTER STEPS ────────────────────────────────── */
+  /* ── STEPS ───────────────────────────────────────── */
   .steps {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-top: 40px;
+    gap: 14px;
+    margin-top: 36px;
   }
   .step {
     background: rgba(255,255,255,.03);
-    border: 1px solid rgba(255,255,255,.07);
-    border-radius: 14px;
-    padding: 22px 20px;
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 12px;
+    padding: 20px 18px;
   }
   .step-num {
-    font-family: 'Syne', sans-serif;
-    font-size: 30px; font-weight: 800;
-    color: rgba(0,200,212,.3);
+    font-size: 28px;
+    font-weight: 800;
+    color: rgba(0,200,212,.25);
     line-height: 1;
     margin-bottom: 8px;
   }
   .step h4 {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px; font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
     margin-bottom: 4px;
   }
   .step p { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-  /* ── RESPONSIVE ──────────────────────────────────── */
   @media (max-width: 600px) {
     .steps { grid-template-columns: 1fr; }
-    .bar-row { grid-template-columns: 110px 1fr 40px; }
+    .bar-row { grid-template-columns: 110px 1fr 36px; }
     .bar-tags { display: none; }
-    .card { padding: 24px; }
+    .card { padding: 20px; }
+    .logo-divider { margin: 0 14px; height: 28px; }
   }
 </style>
 </head>
@@ -327,21 +352,44 @@
 
   <!-- HEADER -->
   <header>
-    <div class="logo-mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#0D1B2A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    <div class="logo-altcom">
+
+      <!-- Logo Altcom: ícone "A" + wordmark -->
+      <svg width="148" height="40" viewBox="0 0 148 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="orbGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#00D4C8"/>
+            <stop offset="100%" stop-color="#0098A0"/>
+          </linearGradient>
+        </defs>
+        <!-- círculo gradiente -->
+        <circle cx="20" cy="20" r="19" fill="url(#orbGrad)"/>
+        <!-- A chevron branco -->
+        <path d="M11 27 L20 10 L29 27" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M14.5 21.5 L25.5 21.5" stroke="white" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        <!-- Notch / seta para baixo no topo do A -->
+        <path d="M20 10 L17.5 15.5 L20 13.5 L22.5 15.5 Z" fill="white" opacity=".9"/>
+
+        <!-- wordmark ALTCOM -->
+        <text x="46" y="16" font-family="Inter,sans-serif" font-size="13" font-weight="800" fill="#00C8D4" letter-spacing="1.5">ALTCOM</text>
+        <!-- sub TECNOLOGIA -->
+        <text x="46" y="31" font-family="Inter,sans-serif" font-size="9.5" font-weight="500" fill="#8899AA" letter-spacing="2.8">TECNOLOGIA</text>
       </svg>
-    </div>
-    <div class="logo-text">
-      <h1>Altcom 365</h1>
-      <span>Metodologia de Eficiência Técnica</span>
+
+      <div class="logo-divider"></div>
+
+      <div class="logo-service">
+        <span class="logo-service-title">Laudo de Eficiência Técnica</span>
+        <span class="logo-service-sub">Altcom Tecnologia</span>
+      </div>
+
     </div>
   </header>
 
   <!-- HERO -->
   <div class="hero">
-    <h2>Gere o <em>Laudo</em> de<br>Eficiência Técnica</h2>
-    <p>Importe o export analítico do Milvus. Em segundos o laudo completo é gerado com classificação, diagnóstico e recomendações de upgrade.</p>
+    <h2>Análise completa do<br>parque de <em>estações de trabalho</em></h2>
+    <p>Importe o export analítico do Milvus. Em segundos o laudo é gerado com classificação, diagnóstico e recomendações de upgrade por dispositivo.</p>
   </div>
 
   <!-- UPLOAD CARD -->
@@ -371,20 +419,19 @@
 
     <div id="error-msg"></div>
 
-    <!-- PREVIEW -->
     <div id="preview">
       <div class="preview-header">
         <h3 id="previewCliente">—</h3>
         <span class="total" id="previewTotal"></span>
       </div>
       <div class="bars" id="barsContainer"></div>
-      <button class="btn btn-download" id="btnDownload" style="margin-top:20px">
+      <button class="btn btn-download" id="btnDownload" style="margin-top:18px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/>
           <line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
-        Baixar Laudo Excel
+        <span>Baixar Laudo Excel</span>
       </button>
     </div>
   </div>
@@ -404,11 +451,11 @@
     <div class="step">
       <div class="step-num">03</div>
       <h4>Baixe o laudo</h4>
-      <p>Excel formatado com 3 abas: Laudo, Resumo e Legenda</p>
+      <p>Excel com 3 abas: Laudo, Resumo Executivo e Legenda</p>
     </div>
   </div>
 
-</div><!-- /wrap -->
+</div>
 
 <script>
 const dropZone   = document.getElementById('dropZone');
@@ -453,16 +500,12 @@ btnGerar.addEventListener('click', async () => {
   if (!selectedFile) return;
   setLoading(true);
   hideError();
-
   const fd = new FormData();
   fd.append('arquivo', selectedFile);
-
   try {
-    const res = await fetch('/preview', { method: 'POST', body: fd });
+    const res  = await fetch('/preview', { method: 'POST', body: fd });
     const data = await res.json();
-
     if (data.erro) { showError(data.erro); setLoading(false); return; }
-
     renderPreview(data);
     previewDiv.style.display = 'block';
     btnLabel.textContent = 'Atualizar';
@@ -476,21 +519,21 @@ btnGerar.addEventListener('click', async () => {
 btnDownload.addEventListener('click', async () => {
   if (!selectedFile) return;
   btnDownload.disabled = true;
-  btnDownload.querySelector('span') && (btnDownload.querySelector('span').textContent = 'Gerando...');
-
+  const spanDl = btnDownload.querySelector('span');
+  if (spanDl) spanDl.textContent = 'Gerando...';
   const fd = new FormData();
   fd.append('arquivo', selectedFile);
-
   try {
     const res = await fetch('/gerar', { method: 'POST', body: fd });
     if (!res.ok) {
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       showError(j.erro || 'Erro ao gerar o laudo.');
       btnDownload.disabled = false;
+      if (spanDl) spanDl.textContent = 'Baixar Laudo Excel';
       return;
     }
-    const blob = await res.blob();
-    const cd   = res.headers.get('Content-Disposition') || '';
+    const blob  = await res.blob();
+    const cd    = res.headers.get('Content-Disposition') || '';
     const match = cd.match(/filename="?([^"]+)"?/);
     const name  = match ? match[1] : 'Laudo_Eficiencia.xlsx';
     const url   = URL.createObjectURL(blob);
@@ -501,30 +544,24 @@ btnDownload.addEventListener('click', async () => {
     showError('Erro ao baixar o arquivo.');
   }
   btnDownload.disabled = false;
+  if (spanDl) spanDl.textContent = 'Baixar Laudo Excel';
 });
 
 // ── render preview ─────────────────────────────────────────────────────────
 function renderPreview(data) {
   document.getElementById('previewCliente').textContent = data.cliente;
-  document.getElementById('previewTotal').textContent   = `${data.total} dispositivos`;
-
+  document.getElementById('previewTotal').textContent   = data.total + ' dispositivos';
   const container = document.getElementById('barsContainer');
   container.innerHTML = '';
-
   data.resumo.forEach(item => {
     const row = document.createElement('div');
     row.className = 'bar-row';
-
-    // label badge
     const lbl = document.createElement('div');
     lbl.className = 'bar-label';
     lbl.textContent = item.label;
-    lbl.style.background = '#' + item.bg + '22';
-    lbl.style.color = item.label === 'CRÍTICO' || item.label === 'ÓTIMO'
-      ? '#' + item.bg : '#' + item.bg;
-    lbl.style.border = '1px solid #' + item.bg + '55';
-
-    // bar
+    lbl.style.background = '#' + item.bg + '20';
+    lbl.style.color = '#' + item.bg;
+    lbl.style.border = '1px solid #' + item.bg + '50';
     const track = document.createElement('div');
     track.className = 'bar-track';
     const fill = document.createElement('div');
@@ -533,33 +570,26 @@ function renderPreview(data) {
     fill.style.width = '0%';
     track.appendChild(fill);
     setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
-
-    // count
     const cnt = document.createElement('div');
     cnt.className = 'bar-count';
     cnt.textContent = item.qtd;
     cnt.style.color = '#' + item.bg;
-
-    // tags
     const tags = document.createElement('div');
     tags.className = 'bar-tags';
     if (item.man_prev > 0) {
       const t = document.createElement('span');
       t.className = 'tag mp';
-      t.textContent = `${item.man_prev} Man. Prev.`;
+      t.textContent = item.man_prev + ' Man. Prev.';
       tags.appendChild(t);
     }
     if (item.upgrade > 0) {
       const t = document.createElement('span');
       t.className = 'tag upg';
-      t.textContent = `${item.upgrade} Upgrade`;
+      t.textContent = item.upgrade + ' Upgrade';
       tags.appendChild(t);
     }
-
-    row.appendChild(lbl);
-    row.appendChild(track);
-    row.appendChild(cnt);
-    row.appendChild(tags);
+    row.appendChild(lbl); row.appendChild(track);
+    row.appendChild(cnt); row.appendChild(tags);
     container.appendChild(row);
   });
 }
