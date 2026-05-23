@@ -60,6 +60,30 @@
     display: flex; align-items: center; gap: 20px;
   }
 
+  .header-right {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .user-badge {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .btn-logout {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: var(--muted);
+    padding: 6px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color .2s, color .2s;
+  }
+  .btn-logout:hover { border-color: var(--cyan); color: var(--cyan); }
+
   .logo-mark {
     width: 48px; height: 48px; flex-shrink: 0;
     background: var(--cyan);
@@ -336,6 +360,10 @@
       <h1>Altcom 365</h1>
       <span>Metodologia de Eficiência Técnica</span>
     </div>
+    <div class="header-right">
+      {% if username %}<span class="user-badge">{{ username }}</span>{% endif %}
+      <a href="/logout" class="btn-logout">Sair</a>
+    </div>
   </header>
 
   <!-- HERO -->
@@ -546,36 +574,4 @@ function renderPreview(data) {
     if (item.man_prev > 0) {
       const t = document.createElement('span');
       t.className = 'tag mp';
-      t.textContent = `${item.man_prev} Man. Prev.`;
-      tags.appendChild(t);
-    }
-    if (item.upgrade > 0) {
-      const t = document.createElement('span');
-      t.className = 'tag upg';
-      t.textContent = `${item.upgrade} Upgrade`;
-      tags.appendChild(t);
-    }
-
-    row.appendChild(lbl);
-    row.appendChild(track);
-    row.appendChild(cnt);
-    row.appendChild(tags);
-    container.appendChild(row);
-  });
-}
-
-function setLoading(on) {
-  btnGerar.disabled = on;
-  spinner.style.display = on ? 'block' : 'none';
-  if (on) btnLabel.textContent = 'Processando...';
-}
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.style.display = 'block';
-}
-function hideError() {
-  errorMsg.style.display = 'none';
-}
-</script>
-</body>
-</html>
+      t.textContent =
