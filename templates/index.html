@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Altcom 365 · Laudo de Eficiência Técnica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:    #0D1B2A;
+    --cyan:    #00C8D4;
+    --cyan-dim:#007f88;
+    --white:   #FFFFFF;
+    --off:     #F0F4F8;
+    --muted:   #8899AA;
+    --border:  #D8E2EC;
+
+    --excelente:  #00B0F0;
+    --otimo:      #00B050;
+    --bom:        #92D050;
+    --satisf:     #FFC000;
+    --critico:    #C00000;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--white);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── BACKGROUND TEXTURE ─────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,200,212,.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,176,80,.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  /* ── LAYOUT ─────────────────────────────────────── */
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ── HEADER ─────────────────────────────────────── */
+  header {
+    padding: 52px 0 40px;
+    display: flex; align-items: center; gap: 20px;
+  }
+
+  .logo-mark {
+    width: 48px; height: 48px; flex-shrink: 0;
+    background: var(--cyan);
+    border-radius: 12px;
+    display: grid; place-items: center;
+  }
+  .logo-mark svg { width: 26px; height: 26px; }
+
+  .logo-text h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px; font-weight: 800;
+    letter-spacing: -.3px;
+    line-height: 1;
+  }
+  .logo-text span {
+    font-size: 12px; font-weight: 400;
+    color: var(--muted);
+    letter-spacing: .6px;
+    text-transform: uppercase;
+  }
+
+  /* ── HERO COPY ───────────────────────────────────── */
+  .hero {
+    margin-bottom: 40px;
+  }
+  .hero h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -.5px;
+    margin-bottom: 12px;
+  }
+  .hero h2 em {
+    font-style: normal;
+    color: var(--cyan);
+  }
+  .hero p {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 520px;
+  }
+
+  /* ── UPLOAD CARD ─────────────────────────────────── */
+  .card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 20px;
+    padding: 36px;
+    backdrop-filter: blur(12px);
+  }
+
+  .drop-zone {
+    border: 2px dashed rgba(0,200,212,.35);
+    border-radius: 14px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: var(--cyan);
+    background: rgba(0,200,212,.06);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .drop-icon {
+    width: 52px; height: 52px;
+    background: rgba(0,200,212,.12);
+    border-radius: 14px;
+    display: inline-grid; place-items: center;
+    margin-bottom: 16px;
+  }
+  .drop-icon svg { width: 24px; height: 24px; color: var(--cyan); }
+
+  .drop-zone h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .drop-zone p {
+    font-size: 13px; color: var(--muted);
+  }
+  .drop-zone .file-name {
+    display: none;
+    margin-top: 14px;
+    padding: 8px 16px;
+    background: rgba(0,200,212,.12);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--cyan);
+    font-weight: 500;
+  }
+
+  /* ── BTN ─────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--cyan);
+    color: var(--navy);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700;
+    padding: 14px 28px;
+    border-radius: 12px;
+    border: none; cursor: pointer;
+    transition: opacity .2s, transform .1s;
+    text-decoration: none;
+    margin-top: 24px;
+    width: 100%;
+    justify-content: center;
+  }
+  .btn:hover   { opacity: .9; }
+  .btn:active  { transform: scale(.98); }
+  .btn:disabled {
+    opacity: .35; cursor: not-allowed;
+  }
+  .btn svg { width: 18px; height: 18px; }
+
+  /* ── SPINNER ─────────────────────────────────────── */
+  .spinner {
+    display: none;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(13,27,42,.3);
+    border-top-color: var(--navy);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── PREVIEW PANEL ───────────────────────────────── */
+  #preview {
+    display: none;
+    margin-top: 28px;
+    animation: fadeUp .4s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(12px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .preview-header {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .preview-header h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px; font-weight: 700;
+  }
+  .preview-header .total {
+    font-size: 13px; color: var(--muted);
+  }
+
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 54px 80px;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bar-label {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .bar-track {
+    height: 8px;
+    background: rgba(255,255,255,.07);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width .6s cubic-bezier(.4,0,.2,1);
+  }
+
+  .bar-count {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px; font-weight: 800;
+    text-align: right;
+  }
+
+  .bar-tags {
+    display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;
+  }
+  .tag {
+    font-size: 10px; font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .tag.mp  { background: rgba(0,200,212,.15); color: var(--cyan); }
+  .tag.upg { background: rgba(255,192,0,.15);  color: var(--satisf); }
+
+  /* ── DOWNLOAD BTN ────────────────────────────────── */
+  .btn-download {
+    background: var(--navy);
+    color: var(--cyan);
+    border: 2px solid var(--cyan);
+  }
+  .btn-download:hover { background: rgba(0,200,212,.08); opacity: 1; }
+
+  /* ── ERROR ───────────────────────────────────────── */
+  #error-msg {
+    display: none;
+    margin-top: 16px;
+    padding: 14px 18px;
+    background: rgba(192,0,0,.15);
+    border: 1px solid rgba(192,0,0,.4);
+    border-radius: 10px;
+    font-size: 13px;
+    color: #ff9999;
+    animation: fadeUp .3s ease both;
+  }
+
+  /* ── FOOTER STEPS ────────────────────────────────── */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 40px;
+  }
+  .step {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    padding: 22px 20px;
+  }
+  .step-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 30px; font-weight: 800;
+    color: rgba(0,200,212,.3);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .step h4 {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* ── RESPONSIVE ──────────────────────────────────── */
+  @media (max-width: 600px) {
+    .steps { grid-template-columns: 1fr; }
+    .bar-row { grid-template-columns: 110px 1fr 40px; }
+    .bar-tags { display: none; }
+    .card { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0D1B2A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <h1>Altcom 365</h1>
+      <span>Metodologia de Eficiência Técnica</span>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero">
+    <h2>Gere o <em>Laudo</em> de<br>Eficiência Técnica</h2>
+    <p>Importe o export analítico do Milvus. Em segundos o laudo completo é gerado com classificação, diagnóstico e recomendações de upgrade.</p>
+  </div>
+
+  <!-- UPLOAD CARD -->
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <h3>Arraste o arquivo aqui</h3>
+      <p>ou clique para selecionar &nbsp;·&nbsp; .xlsx</p>
+      <div class="file-name" id="fileName"></div>
+    </div>
+
+    <button class="btn" id="btnGerar" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 8 12 12 14 14"/>
+      </svg>
+      <span id="btnLabel">Selecione um arquivo</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+
+    <div id="error-msg"></div>
+
+    <!-- PREVIEW -->
+    <div id="preview">
+      <div class="preview-header">
+        <h3 id="previewCliente">—</h3>
+        <span class="total" id="previewTotal"></span>
+      </div>
+      <div class="bars" id="barsContainer"></div>
+      <button class="btn btn-download" id="btnDownload" style="margin-top:20px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Baixar Laudo Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- STEPS -->
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h4>Exporte do Milvus</h4>
+      <p>Dispositivo por Cliente Analítico — formato .xlsx</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h4>Faça o upload</h4>
+      <p>Arraste o arquivo ou clique para selecionar</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h4>Baixe o laudo</h4>
+      <p>Excel formatado com 3 abas: Laudo, Resumo e Legenda</p>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const btnGerar   = document.getElementById('btnGerar');
+const btnLabel   = document.getElementById('btnLabel');
+const spinner    = document.getElementById('spinner');
+const fileName   = document.getElementById('fileName');
+const previewDiv = document.getElementById('preview');
+const errorMsg   = document.getElementById('error-msg');
+const btnDownload= document.getElementById('btnDownload');
+
+let selectedFile = null;
+
+// ── drag & drop ────────────────────────────────────────────────────────────
+['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.classList.add('drag-over');
+}));
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.classList.remove('drag-over');
+}));
+dropZone.addEventListener('drop', ev => {
+  const f = ev.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+function setFile(f) {
+  selectedFile = f;
+  fileName.textContent = f.name;
+  fileName.style.display = 'inline-block';
+  btnGerar.disabled = false;
+  btnLabel.textContent = 'Gerar Pré-visualização';
+  previewDiv.style.display = 'none';
+  hideError();
+}
+
+// ── preview ────────────────────────────────────────────────────────────────
+btnGerar.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  setLoading(true);
+  hideError();
+
+  const fd = new FormData();
+  fd.append('arquivo', selectedFile);
+
+  try {
+    const res = await fetch('/preview', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (data.erro) { showError(data.erro); setLoading(false); return; }
+
+    renderPreview(data);
+    previewDiv.style.display = 'block';
+    btnLabel.textContent = 'Atualizar';
+  } catch (e) {
+    showError('Erro de comunicação com o servidor.');
+  }
+  setLoading(false);
+});
+
+// ── download ───────────────────────────────────────────────────────────────
+btnDownload.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  btnDownload.disabled = true;
+  btnDownload.querySelector('span') && (btnDownload.querySelector('span').textContent = 'Gerando...');
+
+  const fd = new FormData();
+  fd.append('arquivo', selectedFile);
+
+  try {
+    const res = await fetch('/gerar', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const j = await res.json();
+      showError(j.erro || 'Erro ao gerar o laudo.');
+      btnDownload.disabled = false;
+      return;
+    }
+    const blob = await res.blob();
+    const cd   = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const name  = match ? match[1] : 'Laudo_Eficiencia.xlsx';
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showError('Erro ao baixar o arquivo.');
+  }
+  btnDownload.disabled = false;
+});
+
+// ── render preview ─────────────────────────────────────────────────────────
+function renderPreview(data) {
+  document.getElementById('previewCliente').textContent = data.cliente;
+  document.getElementById('previewTotal').textContent   = `${data.total} dispositivos`;
+
+  const container = document.getElementById('barsContainer');
+  container.innerHTML = '';
+
+  data.resumo.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+
+    // label badge
+    const lbl = document.createElement('div');
+    lbl.className = 'bar-label';
+    lbl.textContent = item.label;
+    lbl.style.background = '#' + item.bg + '22';
+    lbl.style.color = item.label === 'CRÍTICO' || item.label === 'ÓTIMO'
+      ? '#' + item.bg : '#' + item.bg;
+    lbl.style.border = '1px solid #' + item.bg + '55';
+
+    // bar
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.style.background = '#' + item.bg;
+    fill.style.width = '0%';
+    track.appendChild(fill);
+    setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
+
+    // count
+    const cnt = document.createElement('div');
+    cnt.className = 'bar-count';
+    cnt.textContent = item.qtd;
+    cnt.style.color = '#' + item.bg;
+
+    // tags
+    const tags = document.createElement('div');
+    tags.className = 'bar-tags';
+    if (item.man_prev > 0) {
+      const t = document.createElement('span');
+      t.className = 'tag mp';
+      t.textContent = `${item.man_prev} Man. Prev.`;
+      tags.appendChild(t);
+    }
+    if (item.upgrade > 0) {
+      const t = document.createElement('span');
+      t.className = 'tag upg';
+      t.textContent = `${item.upgrade} Upgrade`;
+      tags.appendChild(t);
+    }
+
+    row.appendChild(lbl);
+    row.appendChild(track);
+    row.appendChild(cnt);
+    row.appendChild(tags);
+    container.appendChild(row);
+  });
+}
+
+function setLoading(on) {
+  btnGerar.disabled = on;
+  spinner.style.display = on ? 'block' : 'none';
+  if (on) btnLabel.textContent = 'Processando...';
+}
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.style.display = 'block';
+}
+function hideError() {
+  errorMsg.style.display = 'none';
+}
+</script>
+</body>
+</html>
