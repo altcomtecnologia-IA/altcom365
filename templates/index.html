@@ -383,7 +383,7 @@
     <label class="drop-zone" id="dropZone">
       <input type="file" id="fileInput"
              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-             onchange="if(this.files&&this.files[0])setFile(this.files[0])">
+             onchange="console.log('CHANGE EVENT',this.files);var b=document.getElementById('btnGerar');var l=document.getElementById('btnLabel');if(b&&l&&this.files&&this.files[0]){b.disabled=false;l.textContent='✓ '+this.files[0].name;window._selectedFile=this.files[0];}else{console.error('CHANGE falhou',{b:!!b,l:!!l,files:this.files});}">
       <div class="drop-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -488,13 +488,19 @@ fileInput.addEventListener('change', handleFileChange);
 fileInput.addEventListener('input',  handleFileChange);
 
 function setFile(f) {
-  selectedFile = f;
-  fileName.textContent = f.name;
-  fileName.style.display = 'inline-block';
-  btnGerar.disabled = false;
-  btnLabel.textContent = 'Gerar Pré-visualização';
-  previewDiv.style.display = 'none';
-  hideError();
+  console.log('setFile chamado:', f ? f.name : 'sem arquivo');
+  try {
+    selectedFile = f || window._selectedFile;
+    if (!selectedFile) { console.error('setFile: arquivo nulo'); return; }
+    if (fileName)   { fileName.textContent = selectedFile.name; fileName.style.display = 'inline-block'; }
+    if (btnGerar)   { btnGerar.disabled = false; }
+    if (btnLabel)   { btnLabel.textContent = 'Gerar Pré-visualização'; }
+    if (previewDiv) { previewDiv.style.display = 'none'; }
+    hideError();
+    console.log('setFile OK — botão habilitado');
+  } catch(e) {
+    console.error('setFile ERRO:', e.message, e);
+  }
 }
 
 // ── helpers AJAX ───────────────────────────────────────────────────────────
@@ -564,21 +570,4 @@ btnDownload.addEventListener('click', async () => {
   }
 });
 
-// ── render preview ─────────────────────────────────────────────────────────
-function renderPreview(data) {
-  document.getElementById('previewCliente').textContent = data.cliente;
-  document.getElementById('previewTotal').textContent   = `${data.total} dispositivos`;
-
-  const container = document.getElementById('barsContainer');
-  container.innerHTML = '';
-
-  data.resumo.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-
-    // label badge
-    const lbl = document.createElement('div');
-    lbl.className = 'bar-label';
-    lbl.textContent = item.label;
-    lbl.style.background = '#' + item.bg + '22';
-    lbl.style.color = item.label
+// ── render preview ───────────────────────────────────────�
