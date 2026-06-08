@@ -243,6 +243,12 @@
     border-color: rgba(255,255,255,.06);
     opacity: .5;
   }
+  .alert-card.troca {
+    background: rgba(127,0,0,.1);
+    border-color: rgba(252,165,165,.2);
+  }
+  .alert-card.troca .alert-icon { background: rgba(252,165,165,.15); }
+  .alert-card.troca .alert-count { color: #FCA5A5; }
 
   .alert-icon {
     width: 28px; height: 28px;
@@ -421,6 +427,18 @@
             <div class="alert-count" id="countWindows">—</div>
             <div class="alert-title">Windows desatualizado</div>
             <div class="alert-sub">S.O. anterior ao Win 11</div>
+          </div>
+
+          <!-- Laudados para Troca -->
+          <div class="alert-card troca" id="cardTroca" style="display:none">
+            <div class="alert-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+            </div>
+            <div class="alert-count" id="countTroca">0</div>
+            <div class="alert-title">Laudados para Troca</div>
+            <div class="alert-sub">CRÍTICO com alertas — sem procedimento</div>
           </div>
 
           <!-- Agente Milvus -->
@@ -630,6 +648,16 @@ function renderPreview(data) {
   } else {
     cardMilvus.className = 'alert-card milvus';
     document.getElementById('subMilvus').textContent = 'Sem contato há mais de 40 dias';
+  }
+
+  // Card "Laudados para Troca" — só exibe se houver ao menos 1
+  const cardTroca = document.getElementById('cardTroca');
+  const nTroca = al.laudados_troca ?? 0;
+  if (nTroca > 0) {
+    document.getElementById('countTroca').textContent = nTroca;
+    cardTroca.style.display = '';
+  } else {
+    cardTroca.style.display = 'none';
   }
 }
 
