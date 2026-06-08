@@ -396,22 +396,35 @@ def build_relatorio_interno(input_path, output_path):
         ci += 1
 
         # 3 colunas de alerta
-        alert_styles = [
-            (a['so_alert'],       "FFF2CC", "7F6000"),
-            (a['armazena_alert'], "FFE7E7", "9C0006"),
-            (a['milvus_alert'],   "D6E4F0", "1F4E79"),
-        ]
-        for v, bg_fill, fc in alert_styles:
-            c = ws.cell(row=r, column=ci, value=v if v else "—")
-            if v:
-                c.fill = PatternFill("solid", fgColor=bg_fill)
-                c.font = Font(name='Arial', size=8, bold=True, color=fc)
-            else:
-                c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
-                c.font = Font(name='Arial', size=8, color="BBBBBB")
-            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            c.border = brd()
-            ci += 1
+        # Dispositivos CRÍTICO: informar que foram laudados para troca, sem procedimento específico
+        if classif_base == "CRÍTICO":
+            for col_ci in range(ci, ci + 3):
+                c = ws.cell(row=r, column=col_ci,
+                            value="Laudado para Troca" if col_ci == ci else "—")
+                c.fill = PatternFill("solid", fgColor="F5E6D3")
+                c.font = Font(name='Arial', size=8,
+                              bold=(col_ci == ci), color="7C3D0C",
+                              italic=(col_ci != ci))
+                c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                c.border = brd()
+            ci += 3
+        else:
+            alert_styles = [
+                (a['so_alert'],       "FFF2CC", "7F6000"),
+                (a['armazena_alert'], "FFE7E7", "9C0006"),
+                (a['milvus_alert'],   "D6E4F0", "1F4E79"),
+            ]
+            for v, bg_fill, fc in alert_styles:
+                c = ws.cell(row=r, column=ci, value=v if v else "—")
+                if v:
+                    c.fill = PatternFill("solid", fgColor=bg_fill)
+                    c.font = Font(name='Arial', size=8, bold=True, color=fc)
+                else:
+                    c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
+                    c.font = Font(name='Arial', size=8, color="BBBBBB")
+                c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                c.border = brd()
+                ci += 1
 
         r += 1
 
