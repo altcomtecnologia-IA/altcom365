@@ -157,33 +157,42 @@ def preview():
         # ── Alertas Internos ─────────────────────────────────────────────────
         hoje = pd.Timestamp.today()
 
-        # Armazenamento > 70%
+        # Alertas — excluem dispositivos CRÍTICO (laudados para troca, sem procedimento)
+        from build_laudo import _parse_data_at
+        tem_milvus = 'Data de atualização' in df.columns
+
         def _uso(v):
             s = str(v)
             if 'nan' in s.lower(): return None
             try: return float(s.replace('%','').strip())
             except: return None
 
-        n_armazena = sum(
-            1 for v in df['Armazenamento utilizado']
-            if (lambda u: u is not None and u > 70)(_uso(v))
-        )
-
-        # Windows desatualizado
-        n_windows = int(df['Sistema operacional']
-                        .str.lower().str.contains('windows 10').sum())
-
-        # Agente Milvus > 40 dias
-        n_milvus     = 0
-        tem_milvus   = 'Data de atualização' in df.columns
-        if tem_milvus:
-            from build_laudo import _parse_data_at
-            for v in df['Data de atualização']:
-                dt = _parse_data_at(v)
+        n_armazena = n_windows = n_milvus = n_troca = 0
+        for _, row_a in df_out.iterrows():
+            classif = str(row_a.get('Classificação',''))
+            if classif == 'CRÍTICO':
+                # Conta separado se tiver pelo menos 1 alerta
+                uso  = _uso(row_a.get('Armazenamento utilizado',''))
+                so   = str(row_a.get('Sistema operacional','')).lower()
+                dt_v = row_a.get('Data de atualização', None) if tem_milvus else None
+                dt   = _parse_data_at(dt_v) if dt_v is not None else None
+                milvus_flag = dt is not None and (hoje - dt).days > 40
+                if (uso is not None and uso > 70) or 'windows 10' in so or milvus_flag:
+                    n_troca += 1
+                continue
+            # Dispositivos não-CRÍTICO: conta normalmente
+            uso = _uso(row_a.get('Armazenamento utilizado',''))
+            if uso is not None and uso > 70:
+                n_armazena += 1
+            so = str(row_a.get('Sistema operacional','')).lower()
+            if 'windows 10' in so:
+                n_windows += 1
+            if tem_milvus:
+                dt_v = row_a.get('Data de atualização', None)
+                dt   = _parse_data_at(dt_v)
                 if dt is not None:
                     try:
-                        delta = (hoje - dt).days
-                        if delta > 40:
+                        if (hoje - dt).days > 40:
                             n_milvus += 1
                     except Exception:
                         pass
@@ -193,6 +202,7 @@ def preview():
             'windows':       n_windows,
             'milvus':        n_milvus,
             'tem_milvus':    tem_milvus,
+            'laudados_troca': n_troca,
         }
 
         return jsonify({
