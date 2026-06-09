@@ -47,6 +47,14 @@ def _parse_data_at(val):
         return None
 
 
+def _ver_tuple(v):
+    """'110.0.0.4' → (110, 0, 0, 4) para comparação semântica."""
+    try:
+        return tuple(int(x) for x in str(v).strip().split('.'))
+    except Exception:
+        return (0,)
+
+
 # ── Versão de referência do agente Milvus ────────────────────────────────────
 
 def calcular_versao_referencia(df):
@@ -85,7 +93,7 @@ def calcular_versao_referencia(df):
     todas = df[col_versao].astype(str).str.strip()
     n_desatualizadas = int(
         todas.apply(
-            lambda v: v not in ('', 'nan', 'Não possui') and v != versao_ref
+            lambda v: v not in ('', 'nan', 'Não possui') and _ver_tuple(v) < _ver_tuple(versao_ref)
         ).sum()
     )
     pct = round(n_desatualizadas / len(df) * 100, 1) if len(df) > 0 else 0.0
@@ -150,7 +158,8 @@ def calcular_alertas(df, versao_ref=None):
             s = str(v).strip()
             if s in ('', 'nan', 'Não possui'):
                 return ""
-            return f"Desatualizada ({s}) — atualizar" if s != str(versao_ref) else ""
+            # Só alerta se a versão atual for MAIS ANTIGA que a referência
+            return f"Desatualizada ({s}) — atualizar" if _ver_tuple(s) < _ver_tuple(str(versao_ref)) else ""
         df['_alerta_milvus'] = df['VERSÃO DO CLIENT'].apply(_milvus_alerta)
     else:
         df['_alerta_milvus'] = ""
