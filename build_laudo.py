@@ -1,7 +1,22 @@
+"""
+build_laudo.py
+Altcom 365 v2 — geração dos laudos Excel (cliente + interno Altcom).
+
+Suporta dois formatos:
+  • Novo (UPPERCASE) — Relatório Milvus Completo com 15+ colunas obrigatórias
+  • Antigo (mixed case) — export Analítico por cliente (retrocompatibilidade)
+
+Fluxo recomendado para novo formato:
+  1. calcular_alertas(df_uppercase, versao_ref)   → df com _alerta_* e _uso_pct
+  2. normalize_df(df_com_alertas)                 → renomeia para colunas do engine
+  3. build_laudo_cliente(df, output, cliente)
+  4. build_relatorio_interno(df, output, cliente, versao_ref)
+"""
 import os, sys, re
 from datetime import datetime
 import pandas as pd
-sys.path.insert(0, os.path.dirname(__file__))
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_altcom365 import (classify, device_type, parse_uso, parse_storage,
                                parse_ram, BADGE_COLORS)
 from openpyxl import Workbook
@@ -11,7 +26,23 @@ from openpyxl.utils import get_column_letter
 NAVY, WHITE, ZEBRA, BORDER_C = "0D1B2A", "FFFFFF", "F5F7FA", "D0D5DD"
 CYAN = "00C8D4"
 
-# ── Frases que NAO aparecem no laudo do cliente ───────────────────────────────
+# ── Mapeamento novo formato → colunas do engine ───────────────────────────────
+COL_MAP_NOVO = {
+    'NOME DO DISPOSITIVO':         'Nome do dispositivo',
+    'TIPO DO DISPOSITIVO':         'Tipo de dispositivo',
+    'SISTEMA OPERACIONAL':         'Sistema operacional',
+    'PROCESSADOR':                 'Processador',
+    'NÚCLEOS DO PROCESSADOR':      'Núcleos do processador',
+    'MEMÓRIA RAM TOTAL':           'Memória RAM total',
+    'ARMAZENAMENTO INTERNO TOTAL': 'Armazenamento total',
+    'NOME FANTASIA DO CLIENTE':    'Cliente',
+    'APELIDO':                     'Apelido',
+    'USUÁRIO LOGADO':              'Usuário logado',
+    'DATA DE ATUALIZAÇÃO':         'Data de atualização',
+    'VERSÃO DO CLIENT':            'Versão do client',
+}
+
+# ── Frases que NÃO aparecem no laudo do cliente ───────────────────────────────
 _DESC_REMOVE = [
     "Necessário fazer upgrade para Windows 11.",
     "Manutenção preventiva de armazenamento recomendada.",
@@ -21,28 +52,99 @@ _SUG_REMOVE = {"Upgrade Windows 11 Pro", "Preventiva de armazenamento",
                "Limpeza de armazenamento urgente"}
 _WIN_PRICE  = "R$ 145,00"
 
-# ── Estilos ───────────────────────────────────────────────────────────────────
+# Cores de alerta interno
+ALERT_COLORS = {
+    'armazenamento': ("FFE7E7", "C0392B"),
+    'windows':       ("FFF2CC", "D4AC0D"),
+    'sem_contato':   ("D4E8F8", "2874A6"),
+    'milvus':        ("ECEFF1", "5D6D7E"),
+    'troca':         ("F9E6E6", "922B21"),
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NORMALIZAÇÃO
+# ══════════════════════════════════════════════════════════════════════════════
+
+def is_new_format(df):
+    """Retorna True se o df vem do Relatório Milvus Completo (colunas UPPERCASE)."""
+    return 'NOME DO DISPOSITIVO' in df.columns
+
+
+def normalize_df(df):
+    """
+    Converte df do novo formato (UPPERCASE) para colunas compatíveis com o engine.
+    Se já estiver no formato antigo, retorna sem alterações.
+    Preserva colunas _uso_pct e _alerta_* geradas por alertas_internos.
+    """
+    if not is_new_format(df):
+        return df  # antigo — engine já funciona
+
+    df = df.copy()
+
+    # ── Calcula Armazenamento utilizado % ─────────────────────────────────────
+    if '_uso_pct' in df.columns:
+        # Já computado por calcular_alertas → converte para string
+        df['Armazenamento utilizado'] = df['_uso_pct'].apply(
+            lambda u: f"{u:.2f}%" if (u is not None and not pd.isna(u)) else "NaN%"
+        )
+    else:
+        def _calc_uso(row):
+            def _gb(v):
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return None
+                s = str(v).replace(' GB','').replace('GB','').replace(',','.').strip()
+                try: return float(s)
+                except: return None
+            total = _gb(row.get('ARMAZENAMENTO INTERNO TOTAL'))
+            if not total or total <= 0:
+                return "NaN%"
+            util = _gb(row.get('ARMAZENAMENTO INTERNO UTILIZADO'))
+            if util is not None:
+                return f"{util/total*100:.2f}%"
+            disp = _gb(row.get('ARMAZENAMENTO INTERNO DISPONÍVEL'))
+            if disp is not None:
+                return f"{(total-disp)/total*100:.2f}%"
+            return "NaN%"
+        df['Armazenamento utilizado'] = df.apply(_calc_uso, axis=1)
+
+    # ── Renomeia colunas ──────────────────────────────────────────────────────
+    df = df.rename(columns=COL_MAP_NOVO)
+
+    # ── Limpa strings em colunas de texto opcionais ───────────────────────────
+    for col in ('Apelido', 'Usuário logado'):
+        if col in df.columns:
+            df[col] = (df[col].astype(str)
+                       .replace({'nan': '', 'None': '', 'Não possui': '', 'NaN': ''}))
+
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ESTILOS OPENPYXL
+# ══════════════════════════════════════════════════════════════════════════════
+
 def brd():
     s = Side(style='thin', color=BORDER_C)
     return Border(left=s, right=s, top=s, bottom=s)
 
-def badge_style(classif_base, badge_text):
+def badge_style(classif_base, badge_text=None):
     bg, fg = BADGE_COLORS.get(classif_base, ("FFFFFF", "000000"))
     return PatternFill("solid", fgColor=bg), Font(name='Arial', bold=True, size=8, color=fg)
 
 def hdr(ws, r, c, v):
     cell = ws.cell(row=r, column=c, value=v)
-    cell.fill = PatternFill("solid", fgColor=CYAN)
-    cell.font = Font(name='Arial', bold=True, size=9, color=NAVY)
+    cell.fill      = PatternFill("solid", fgColor=CYAN)
+    cell.font      = Font(name='Arial', bold=True, size=9, color=NAVY)
     cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    cell.border = brd()
+    cell.border    = brd()
 
 def dat(ws, r, c, v, z=False, ha='left', wrap=True, size=8):
     cell = ws.cell(row=r, column=c, value=v)
-    cell.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
-    cell.font = Font(name='Arial', size=size)
+    cell.fill      = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
+    cell.font      = Font(name='Arial', size=size)
     cell.alignment = Alignment(horizontal=ha, vertical='center', wrap_text=wrap)
-    cell.border = brd()
+    cell.border    = brd()
 
 def title_strip(ws, row, text, span, h=34):
     ws.row_dimensions[row].height = h
@@ -50,39 +152,43 @@ def title_strip(ws, row, text, span, h=34):
         ws.cell(row=row, column=col).fill = PatternFill("solid", fgColor=NAVY)
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=span)
     c = ws.cell(row=row, column=1, value=text)
-    c.font = Font(name='Arial', bold=True, size=13, color=WHITE)
+    c.font      = Font(name='Arial', bold=True, size=13, color=WHITE)
     c.alignment = Alignment(horizontal='left', vertical='center', indent=1)
 
-# ── Limpeza para laudo do cliente ─────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPERS DE LIMPEZA (laudo do cliente)
+# ══════════════════════════════════════════════════════════════════════════════
+
 def _clean_descritivo(desc):
-    result = desc
+    result = str(desc)
     for phrase in _DESC_REMOVE:
         result = result.replace(phrase, '')
     result = re.sub(r'\s+', ' ', result).strip()
     return result or "Configuração adequada."
 
 def _clean_sugestao(sug):
-    if not sug or sug == "NA":
+    if not sug or str(sug) in ('NA', 'nan'):
         return "NA"
-    lines = [l.strip() for l in sug.split('\n') if l.strip() not in _SUG_REMOVE]
+    lines = [l.strip() for l in str(sug).split('\n') if l.strip() not in _SUG_REMOVE]
     return '\n'.join(lines) if lines else "NA"
 
 def _clean_precos(prec):
-    if not prec or prec == "NA":
+    if not prec or str(prec) in ('NA', 'nan'):
         return "NA"
-    parts = [p.strip() for p in prec.split(' | ') if p.strip() != _WIN_PRICE]
+    parts = [p.strip() for p in str(prec).split(' | ') if p.strip() != _WIN_PRICE]
     return ' | '.join(parts) if parts else "NA"
 
-def _badge_cliente(classif, orig_row):
+def _badge_cliente(classif, row):
+    """Badge exibido no laudo do cliente: sem menção a Windows/armazenamento."""
     if classif == "CRÍTICO":
         return "CRÍTICO"
-    ram     = parse_ram(orig_row.get('Memória RAM total', 0))
-    storage = parse_storage(orig_row.get('Armazenamento total', 0))
+    ram     = parse_ram(row.get('Memória RAM total', 0))
+    storage = parse_storage(row.get('Armazenamento total', 0))
     if ram < 8 or storage < 200:
         return classif + " - Upgrade"
     return classif
 
-# ── Parser de Data de atualizacao ─────────────────────────────────────────────
 def _parse_data_at(val):
     if val is None:
         return None
@@ -95,130 +201,144 @@ def _parse_data_at(val):
     s = str(val).strip()
     if not s or s.lower() in ('nan', 'nat', ''):
         return None
-    try:
-        return pd.to_datetime(s, format='%d/%m/%Y %H:%M')
-    except Exception:
-        pass
+    for fmt in ('%d/%m/%Y %H:%M', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return pd.to_datetime(s, format=fmt)
+        except Exception:
+            pass
     try:
         return pd.to_datetime(s, dayfirst=True)
     except Exception:
         return None
 
+def _uso_display(row):
+    """Retorna string 'XX.X%' para exibição, preferindo _uso_pct pré-computado."""
+    u = row.get('_uso_pct')
+    if u is not None and not (isinstance(u, float) and pd.isna(u)):
+        return f"{float(u):.1f}%"
+    uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
+    return f"{uso:.1f}%" if uso is not None else "N/D"
 
-# ════════════════════════════════════════════════════════════════════════════════
-# LAUDO DO CLIENTE (limpo)
-# ════════════════════════════════════════════════════════════════════════════════
-def build_laudo_cliente(input_path, output_path):
-    df      = pd.read_excel(input_path)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LAUDO DO CLIENTE (3 abas, limpo — 14 colunas)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_laudo_cliente(df, output_path, cliente_nome=None):
+    """
+    Gera o laudo de eficiência para o cliente (Excel 3 abas).
+
+    Parâmetros
+    ----------
+    df           : DataFrame já normalizado (após normalize_df)
+    output_path  : caminho de saída .xlsx
+    cliente_nome : string com nome do cliente (se None, lê de df['Cliente'])
+    """
     results = df.apply(classify, axis=1)
-    df_out  = pd.concat([df, results], axis=1)
+    df_out  = pd.concat([df.reset_index(drop=True), results.reset_index(drop=True)], axis=1)
 
-    cliente = str(df_out['Cliente'].iloc[0]) if 'Cliente' in df_out.columns else "Cliente"
-    hoje    = pd.Timestamp.today().strftime('%d/%m/%y')
-    total   = len(df_out)
+    if cliente_nome is None:
+        cliente_nome = (str(df_out['Cliente'].iloc[0]).strip()
+                        if 'Cliente' in df_out.columns else "Cliente")
+    hoje  = pd.Timestamp.today().strftime('%d/%m/%y')
+    total = len(df_out)
 
     wb = Workbook()
 
-    # ABA 1: LAUDO
+    # ── ABA 1: LAUDO ─────────────────────────────────────────────────────────
     ws = wb.active; ws.title = "Laudo"
-    NCOLS = 12
-    title_strip(ws, 1, f"LAUDO DE EFICIENCIA TECNICA  |  {cliente.upper()}", NCOLS)
+    NCOLS = 14
+
+    title_strip(ws, 1, f"LAUDO DE EFICIÊNCIA TÉCNICA  |  {cliente_nome.upper()}", NCOLS)
     ws.row_dimensions[2].height = 18
     ws.merge_cells(f'A2:{get_column_letter(NCOLS)}2')
-    ws['A2'] = f"Metodologia Altcom 365 - Avaliacao do Parque de Estacoes de Trabalho - Data {hoje}"
+    ws['A2'] = f"Metodologia Altcom 365 — Avaliação do Parque de Estações de Trabalho — {hoje}"
     ws['A2'].font      = Font(name='Arial', size=9, color="888888")
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
-    cols_hdr = ['Tipo','Dispositivo','S.O.','Processador','Nucleos','RAM',
-                'Armazenamento','Uso %','Classificacao','Descritivo','Durabilidade','Sugestao']
+    HEADERS = ['Tipo', 'Dispositivo', 'Apelido', 'Usuário Logado', 'S.O.',
+               'Processador', 'Núcleos', 'RAM', 'Armazenamento', 'Uso %',
+               'Classificação', 'Descritivo', 'Durabilidade', 'Sugestão']
     ws.row_dimensions[4].height = 22
-    for ci, h in enumerate(cols_hdr, 1):
+    for ci, h in enumerate(HEADERS, 1):
         hdr(ws, 4, ci, h)
 
-    for ridx, row in df_out.iterrows():
-        r  = ridx + 5
-        ws.row_dimensions[r].height = 44
-        z  = ridx % 2 == 0
+    for i, (_, row) in enumerate(df_out.iterrows()):
+        r = i + 5
+        ws.row_dimensions[r].height = 46
+        z = i % 2 == 0
 
-        uso   = parse_uso(row['Armazenamento utilizado'])
-        uso_s = f"{uso:.1f}%" if uso is not None else "N/D"
-        st    = parse_storage(row['Armazenamento total'])
-        st_s  = f"{st:.0f} GB SSD" if st > 0 else "N/D"
-        tipo_label   = "Desktop" if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop' else "Notebook"
-        classif_base = row['Classificacao'] if 'Classificacao' in row.index else row.get('Classificação','')
-        # Try both column names
-        classif_base = str(row.get('Classificação', row.get('Classificacao','')))
-        desc_raw  = str(row.get('Descritivo',''))
-        sug_raw   = str(row.get('Sugestao', row.get('Sugestão','')))
-        dur_raw   = str(row.get('Durabilidade estimada',''))
+        tipo_label   = ("Desktop"
+                        if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop'
+                        else "Notebook")
+        classif_base = str(row.get('Classificação', ''))
+        badge_c      = _badge_cliente(classif_base, row)
+        uso_s        = _uso_display(row)
+        st           = parse_storage(row.get('Armazenamento total', 0))
+        st_s         = f"{st:.0f} GB SSD" if st > 0 else "N/D"
+        desc_c       = _clean_descritivo(str(row.get('Descritivo', '')))
+        sug_c        = _clean_sugestao(str(row.get('Sugestão', row.get('Sugestao', ''))))
+        dur_raw      = str(row.get('Durabilidade estimada', ''))
+        apelido      = str(row.get('Apelido', '')) or '—'
+        usuario      = str(row.get('Usuário logado', '')) or '—'
 
-        desc_c  = _clean_descritivo(desc_raw)
-        sug_c   = _clean_sugestao(sug_raw)
-        badge_c = _badge_cliente(classif_base, row)
-
-        vals_align = [
-            (tipo_label,                    'center'),
-            (row.get('Nome do dispositivo',''), 'left'),
-            (row.get('Sistema operacional',''), 'left'),
-            (row.get('Processador',''),         'left'),
-            (row.get('Nucleos do processador', row.get('Núcleos do processador','')), 'center'),
-            (row.get('Memoria RAM total', row.get('Memória RAM total','')), 'center'),
-            (st_s,   'center'),
-            (uso_s,  'center'),
-            (badge_c,'center'),
-            (desc_c, 'left'),
-            (dur_raw,'center'),
-            (sug_c,  'left'),
+        vals = [
+            (tipo_label,                            'center'),
+            (str(row.get('Nome do dispositivo', '')), 'left'),
+            (apelido,                                'left'),
+            (usuario,                                'left'),
+            (str(row.get('Sistema operacional', '')), 'left'),
+            (str(row.get('Processador', '')),          'left'),
+            (str(row.get('Núcleos do processador', '')), 'center'),
+            (str(row.get('Memória RAM total', '')),    'center'),
+            (st_s,    'center'),
+            (uso_s,   'center'),
+            (badge_c, 'center'),
+            (desc_c,  'left'),
+            (dur_raw, 'center'),
+            (sug_c,   'left'),
         ]
-        for ci, (v, ha) in enumerate(vals_align, 1):
-            if ci == 9:
+
+        for ci, (v, ha) in enumerate(vals, 1):
+            if ci == 11:  # Classificação — badge colorido
                 c = ws.cell(row=r, column=ci, value=v)
-                fill, font = badge_style(classif_base, badge_c)
+                fill, font = badge_style(classif_base)
                 c.fill = fill; c.font = font
                 c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 c.border = brd()
             else:
                 dat(ws, r, ci, v, z=z, ha=ha)
 
-    for i, w in enumerate([10,20,26,38,8,8,14,7,20,50,12,30], 1):
+    for i, w in enumerate([10, 20, 16, 16, 26, 36, 8, 8, 14, 7, 20, 50, 12, 30], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
 
-    # ABA 2: RESUMO
+    # ── ABA 2: RESUMO EXECUTIVO ───────────────────────────────────────────────
     ws2 = wb.create_sheet("Resumo Executivo")
     title_strip(ws2, 1, "RESUMO EXECUTIVO", 5)
     ws2.row_dimensions[2].height = 18
     ws2.merge_cells('A2:E2')
-    ws2['A2'] = f"Total de dispositivos avaliados: {total} | Cliente: {cliente} | Data: {hoje}"
+    ws2['A2'] = f"Total de dispositivos avaliados: {total} | Cliente: {cliente_nome} | Data: {hoje}"
     ws2['A2'].font      = Font(name='Arial', size=10, color="444444")
     ws2['A2'].alignment = Alignment(indent=1)
     ws2.row_dimensions[3].height = 5
-    for ci, h in enumerate(['Classificacao','Qtd','%','Durabilidade ref.','Status'], 1):
+    for ci, h in enumerate(['Classificação', 'Qtd', '%', 'Durabilidade ref.', 'Status'], 1):
         hdr(ws2, 4, ci, h)
     ws2.row_dimensions[4].height = 22
 
-    order   = ["EXCELENTE","OTIMO","BOM","SATISFATORIO","CRITICO"]
-    dur_ref = {"EXCELENTE":"2029/2030","OTIMO":"2028/2029","BOM":"2027/2028",
-               "SATISFATORIO":"2026/2027","CRITICO":"Troca"}
-    status  = {"EXCELENTE":"Hardware ideal, alta longevidade",
-               "OTIMO":"Hardware adequado, operacao estavel",
-               "BOM":"Funcional, ajustes pontuais necessarios",
-               "SATISFATORIO":"Limite operacional, planejar renovacao",
-               "CRITICO":"Substituicao imediata recomendada"}
+    classif_col = 'Classificação'
+    order_real  = ["EXCELENTE", "ÓTIMO", "BOM", "SATISFATÓRIO", "CRÍTICO"]
+    dur_ref_r   = {"EXCELENTE": "2029/2030", "ÓTIMO": "2028/2029", "BOM": "2027/2028",
+                   "SATISFATÓRIO": "2026/2027", "CRÍTICO": "Troca"}
+    status_r    = {"EXCELENTE": "Hardware ideal, alta longevidade",
+                   "ÓTIMO":     "Hardware adequado, operação estável",
+                   "BOM":       "Funcional, ajustes pontuais necessários",
+                   "SATISFATÓRIO": "Limite operacional, planejar renovação",
+                   "CRÍTICO":   "Substituição imediata recomendada"}
 
-    # Normaliza nomes de classificacao para lookup
-    classif_col = 'Classificação' if 'Classificação' in df_out.columns else 'Classificacao'
-    order_real = ["EXCELENTE","ÓTIMO","BOM","SATISFATÓRIO","CRÍTICO"]
-    dur_ref_r = {"EXCELENTE":"2029/2030","ÓTIMO":"2028/2029","BOM":"2027/2028",
-                 "SATISFATÓRIO":"2026/2027","CRÍTICO":"Troca"}
-    status_r = {"EXCELENTE":"Hardware ideal, alta longevidade",
-                "ÓTIMO":"Hardware adequado, operação estável",
-                "BOM":"Funcional, ajustes pontuais necessários",
-                "SATISFATÓRIO":"Limite operacional, planejar renovação",
-                "CRÍTICO":"Substituição imediata recomendada"}
     for ri, cat in enumerate(order_real, 5):
-        qtd = (df_out[classif_col] == cat).sum()
+        qtd = int((df_out[classif_col] == cat).sum())
         ws2.row_dimensions[ri].height = 24
         bg, fg = BADGE_COLORS[cat]
         c = ws2.cell(row=ri, column=1, value=cat)
@@ -230,36 +350,32 @@ def build_laudo_cliente(input_path, output_path):
             cc.font      = Font(name='Arial', size=9)
             cc.alignment = Alignment(horizontal='center' if ci < 5 else 'left', vertical='center')
             cc.border    = brd()
-    for ci, w in enumerate([16,8,8,16,38], 1):
+
+    for ci, w in enumerate([16, 8, 8, 16, 38], 1):
         ws2.column_dimensions[get_column_letter(ci)].width = w
 
-    # ABA 3: LEGENDA
+    # ── ABA 3: LEGENDA ────────────────────────────────────────────────────────
     ws3 = wb.create_sheet("Legenda")
-    title_strip(ws3, 1, "LEGENDA - METODOLOGIA ALTCOM 365", 3)
-    legend_rows = [
-        ("Classificacao","Criterio base","Sufixo / Acao"),
-        ("EXCELENTE","CPU topo de linha + 16 GB RAM + SSD >= 480 GB + Win 11","—"),
-        ("OTIMO","CPU moderna + requisitos minimos atendidos","—"),
-        ("BOM","CPU intermediaria superior + requisitos minimos","—"),
-        ("SATISFATORIO","CPU intermediaria inferior ou requisitos parciais","—"),
-        ("CRITICO","CPU obsoleta — substituicao necessaria","—"),
-        ("","",""),
-        ("Sufixo","Condicao","Acao recomendada"),
-        ("- Upgrade","RAM < 8 GB ou SSD < 200 GB","Upgrade de componente"),
-    ]
+    title_strip(ws3, 1, "LEGENDA — METODOLOGIA ALTCOM 365", 3)
     ws3.row_dimensions[2].height = 5
-    classif_display = {
-        "EXCELENTE":"EXCELENTE","OTIMO":"ÓTIMO","BOM":"BOM",
-        "SATISFATORIO":"SATISFATÓRIO","CRITICO":"CRÍTICO"
-    }
+    legend_rows = [
+        ("Classificação", "Critério base", "Sufixo / Ação"),
+        ("EXCELENTE",    "CPU topo de linha + 16 GB RAM + SSD ≥ 480 GB + Win 11", "—"),
+        ("ÓTIMO",        "CPU moderna + requisitos mínimos atendidos", "—"),
+        ("BOM",          "CPU intermediária superior + requisitos mínimos", "—"),
+        ("SATISFATÓRIO", "CPU intermediária inferior ou requisitos parciais", "—"),
+        ("CRÍTICO",      "CPU obsoleta — substituição necessária", "—"),
+        ("",             "", ""),
+        ("Sufixo",       "Condição",                       "Ação recomendada"),
+        ("- Upgrade",    "RAM < 8 GB ou SSD < 200 GB",    "Upgrade de componente"),
+    ]
     for ri, (a, b, c_val) in enumerate(legend_rows, 3):
         ws3.row_dimensions[ri].height = 22
-        display_a = classif_display.get(a, a)
         if ri in (3, 11):
-            for ci, v in enumerate([display_a, b, c_val], 1): hdr(ws3, ri, ci, v)
-        elif display_a in BADGE_COLORS:
-            bg, fg = BADGE_COLORS[display_a]
-            cell = ws3.cell(row=ri, column=1, value=display_a)
+            for ci, v in enumerate([a, b, c_val], 1): hdr(ws3, ri, ci, v)
+        elif a in BADGE_COLORS:
+            bg, fg = BADGE_COLORS[a]
+            cell = ws3.cell(row=ri, column=1, value=a)
             cell.fill = PatternFill("solid", fgColor=bg)
             cell.font = Font(name='Arial', bold=True, size=9, color=fg)
             cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -267,7 +383,7 @@ def build_laudo_cliente(input_path, output_path):
             for ci, v in enumerate([b, c_val], 2):
                 dat(ws3, ri, ci, v, ha='left')
         else:
-            for ci, v in enumerate([display_a, b, c_val], 1):
+            for ci, v in enumerate([a, b, c_val], 1):
                 dat(ws3, ri, ci, v, ha='left' if ci > 1 else 'center')
     for ci, w in enumerate([18, 58, 28], 1):
         ws3.column_dimensions[get_column_letter(ci)].width = w
@@ -275,76 +391,98 @@ def build_laudo_cliente(input_path, output_path):
     wb.save(output_path)
 
 
-# ════════════════════════════════════════════════════════════════════════════════
-# RELATORIO INTERNO ALTCOM
-# ════════════════════════════════════════════════════════════════════════════════
-def build_relatorio_interno(input_path, output_path):
-    df   = pd.read_excel(input_path)
-    hoje = pd.Timestamp.today()
+# ══════════════════════════════════════════════════════════════════════════════
+# RELATÓRIO INTERNO ALTCOM (1 aba, 16 colunas)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None):
+    """
+    Gera o relatório interno para a equipe Altcom (Excel 1 aba).
+
+    Inclui apenas dispositivos com pelo menos 1 alerta ativo.
+    Dispositivos CRÍTICO aparecem com 'Laudado para Troca' em todas as colunas de alerta.
+
+    Parâmetros
+    ----------
+    df          : DataFrame normalizado (após normalize_df); preferencialmente com _alerta_*
+    output_path : caminho de saída .xlsx
+    cliente_nome: string com nome do cliente
+    versao_ref  : string da versão de referência do agente Milvus (opcional)
+    """
+    hoje     = pd.Timestamp.today()
     hoje_str = hoje.strftime('%d/%m/%y %H:%M')
 
-    cliente    = str(df['Cliente'].iloc[0]) if 'Cliente' in df.columns else "Cliente"
-    HAS_DATA_AT = 'Data de atualização' in df.columns
+    if cliente_nome is None:
+        cliente_nome = (str(df['Cliente'].iloc[0]).strip()
+                        if 'Cliente' in df.columns else "Cliente")
 
-    results = df.apply(classify, axis=1)
+    HAS_DATA_AT   = 'Data de atualização' in df.columns
+    HAS_VERSAO    = 'Versão do client'    in df.columns
+    HAS_ALERTAS   = '_tem_alerta'          in df.columns
 
-    # Computa alertas por linha
-    alert_data = []
-    for idx, row in df.iterrows():
-        res = results.loc[idx]
+    results  = df.apply(classify, axis=1)
+    df_out   = pd.concat([df.reset_index(drop=True), results.reset_index(drop=True)], axis=1)
 
-        uso = parse_uso(row.get('Armazenamento utilizado', None))
-        armazena_alert = f"Ocupacao de {uso:.1f}%" if (uso is not None and uso > 70) else ""
+    # ── Calcula alertas inline se não vieram pré-computados ──────────────────
+    if not HAS_ALERTAS:
+        hoje_ts = hoje
+        def _inline_alerts(row):
+            uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
+            al_arm = f"Preventiva — uso {uso:.1f}%" if (uso and uso > 70) else ""
+            so = str(row.get('Sistema operacional', '')).lower()
+            al_win = "Upgrade para Win 11" if 'windows 10' in so else ""
+            al_sc = ""
+            if HAS_DATA_AT:
+                dt = _parse_data_at(row.get('Data de atualização'))
+                if dt and (hoje_ts - dt).days > 20:
+                    al_sc = f"{int((hoje_ts-dt).days)} dias sem contato — validar com cliente"
+            al_ml = ""
+            if versao_ref and HAS_VERSAO:
+                v = str(row.get('Versão do client', '')).strip()
+                if v and v not in ('', 'nan', 'Não possui') and v != str(versao_ref):
+                    al_ml = f"Desatualizada ({v}) — atualizar"
+            tem = bool(al_arm or al_win or al_sc or al_ml)
+            uso_pct = uso  # raw float
+            return pd.Series({
+                '_uso_pct': uso_pct,
+                '_alerta_armazenamento': al_arm,
+                '_alerta_windows':       al_win,
+                '_alerta_sem_contato':   al_sc,
+                '_alerta_milvus':        al_ml,
+                '_tem_alerta':           tem,
+            })
+        inline = df_out.apply(_inline_alerts, axis=1)
+        df_out = pd.concat([df_out, inline], axis=1)
 
-        so = str(row.get('Sistema operacional', ''))
-        so_alert = "Windows 10 - Upgrade" if 'windows 10' in so.lower() else ""
+    # ── Filtra apenas dispositivos com alerta ─────────────────────────────────
+    alert_df = df_out[df_out['_tem_alerta']].copy()
 
-        milvus_alert = ""
-        if HAS_DATA_AT:
-            dt = _parse_data_at(row.get('Data de atualização'))
-            if dt is not None:
-                delta = (hoje - dt).days
-                if delta > 40:
-                    milvus_alert = f"Desatualizado ha {delta} dias"
-
-        alert_data.append({
-            'idx':            idx,
-            'so_alert':       so_alert,
-            'armazena_alert': armazena_alert,
-            'milvus_alert':   milvus_alert,
-            'tem_alerta':     bool(so_alert or armazena_alert or milvus_alert),
-        })
-
-    alert_df  = [a for a in alert_data if a['tem_alerta']]
-    alert_map = {a['idx']: a for a in alert_df}
+    # ── Cabeçalho Excel ───────────────────────────────────────────────────────
+    HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
+               'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
+               'Data Atualização', 'Versão Agente',
+               'Alerta Armazenamento', 'Alerta Windows',
+               'Alerta Sem Contato', 'Alerta Agente Milvus']
+    NCOLS = len(HEADERS)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Alertas Internos"
 
-    # Define colunas
-    cols_hdr = ['Dispositivo','Tipo','S.O.','Processador','RAM',
-                'Armazenamento','Uso %']
-    if HAS_DATA_AT:
-        cols_hdr.append('Data atualizacao')
-    cols_hdr += ['Classificacao', 'Sistema Operacional', 'Armazenamento ', 'Agente Milvus']
-    NCOLS = len(cols_hdr)
-
     title_strip(ws, 1,
-                f"RELATORIO INTERNO — ALERTAS  |  {cliente.upper()}",
-                NCOLS)
+                f"RELATÓRIO INTERNO — ALERTAS  |  {cliente_nome.upper()}", NCOLS)
     ws.row_dimensions[2].height = 18
     ws.merge_cells(f'A2:{get_column_letter(NCOLS)}2')
-    ws['A2'] = f"Dispositivos com alertas ativos — gerado em {hoje_str}"
+    ws['A2'] = f"Dispositivos com ações operacionais pendentes — gerado em {hoje_str}"
     ws['A2'].font      = Font(name='Arial', size=9, color="888888")
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
     ws.row_dimensions[4].height = 22
-    for ci, h in enumerate(cols_hdr, 1):
+    for ci, h in enumerate(HEADERS, 1):
         hdr(ws, 4, ci, h)
 
-    if not alert_df:
+    if alert_df.empty:
         ws.merge_cells(f'A5:{get_column_letter(NCOLS)}5')
         c = ws.cell(row=5, column=1, value="Nenhum alerta identificado no parque.")
         c.font      = Font(name='Arial', size=10, italic=True, color="888888")
@@ -353,95 +491,87 @@ def build_relatorio_interno(input_path, output_path):
         wb.save(output_path)
         return
 
-    r = 5
-    for a in alert_df:
-        idx  = a['idx']
-        row  = df.loc[idx]
-        res  = results.loc[idx]
+    for i, (_, row) in enumerate(alert_df.iterrows()):
+        r  = i + 5
+        ws.row_dimensions[r].height = 40
+        z  = i % 2 == 0
 
-        ws.row_dimensions[r].height = 38
-        z = (r % 2 == 0)
+        tipo_label   = ("Desktop"
+                        if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop'
+                        else "Notebook")
+        classif_base = str(row.get('Classificação', ''))
+        badge_text   = str(row.get('Badge', classif_base))
+        uso_s        = _uso_display(row)
+        st           = parse_storage(row.get('Armazenamento total', 0))
+        st_s         = f"{st:.0f} GB SSD" if st > 0 else "N/D"
+        apelido      = str(row.get('Apelido', '')) or '—'
+        usuario      = str(row.get('Usuário logado', '')) or '—'
+        cliente_val  = str(row.get('Cliente', cliente_nome)) or cliente_nome
+        data_at_val  = str(row.get('Data de atualização', 'N/D'))
+        versao_val   = str(row.get('Versão do client', 'N/D'))
 
-        uso   = parse_uso(row.get('Armazenamento utilizado', None))
-        uso_s = f"{uso:.1f}%" if uso is not None else "N/D"
-        st    = parse_storage(row.get('Armazenamento total', 0))
-        st_s  = f"{st:.0f} GB SSD" if st > 0 else "N/D"
-        tipo_label   = "Desktop" if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop' else "Notebook"
-        classif_base = str(res.get('Classificação', res.get('Classificacao','')))
-        badge_text   = str(res.get('Badge',''))
-
+        # Colunas básicas (1-12)
         base_vals = [
-            (str(row.get('Nome do dispositivo','')), 'left'),
-            (tipo_label,                              'center'),
-            (str(row.get('Sistema operacional','')),  'left'),
-            (str(row.get('Processador','')),           'left'),
-            (str(row.get('Memória RAM total', row.get('Memoria RAM total',''))), 'center'),
-            (st_s,  'center'),
-            (uso_s, 'center'),
+            (str(row.get('Nome do dispositivo', '')), 'left'),
+            (apelido,      'left'),
+            (usuario,      'left'),
+            (tipo_label,   'center'),
+            (cliente_val,  'left'),
+            (str(row.get('Sistema operacional', '')), 'left'),
+            (str(row.get('Processador', '')),          'left'),
+            (str(row.get('Memória RAM total', '')),    'center'),
+            (st_s,         'center'),
+            (uso_s,        'center'),
+            (data_at_val if HAS_DATA_AT else 'N/D', 'center'),
+            (versao_val  if HAS_VERSAO  else 'N/D', 'center'),
         ]
-        if HAS_DATA_AT:
-            base_vals.append((str(row.get('Data de atualização','')), 'center'))
-
         ci = 1
         for v, ha in base_vals:
             dat(ws, r, ci, v, z=z, ha=ha)
             ci += 1
 
-        # Classificacao badge
-        c = ws.cell(row=r, column=ci, value=badge_text)
-        fill, font = badge_style(classif_base, badge_text)
-        c.fill = fill; c.font = font
-        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        c.border = brd()
-        ci += 1
-
-        # 3 colunas de alerta
-        # Dispositivos CRÍTICO: informar que foram laudados para troca, sem procedimento específico
-        if classif_base == "CRÍTICO":
-            for col_ci in range(ci, ci + 3):
+        # Colunas de alerta (13-16)
+        if classif_base == 'CRÍTICO':
+            # Dispositivo laudado para troca — sem procedimentos específicos
+            bg_t, fc_t = ALERT_COLORS['troca']
+            for col_ci in range(ci, ci + 4):
+                is_first = col_ci == ci
                 c = ws.cell(row=r, column=col_ci,
-                            value="Laudado para Troca" if col_ci == ci else "—")
-                c.fill = PatternFill("solid", fgColor="F5E6D3")
-                c.font = Font(name='Arial', size=8,
-                              bold=(col_ci == ci), color="7C3D0C",
-                              italic=(col_ci != ci))
+                            value="Laudado para Troca" if is_first else "")
+                c.fill      = PatternFill("solid", fgColor=bg_t)
+                c.font      = Font(name='Arial', size=8, bold=is_first, color=fc_t)
                 c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                c.border = brd()
-            ci += 3
+                c.border    = brd()
         else:
-            alert_styles = [
-                (a['so_alert'],       "FFF2CC", "7F6000"),
-                (a['armazena_alert'], "FFE7E7", "9C0006"),
-                (a['milvus_alert'],   "D6E4F0", "1F4E79"),
+            alert_vals = [
+                (str(row.get('_alerta_armazenamento', '')), 'armazenamento'),
+                (str(row.get('_alerta_windows', '')),       'windows'),
+                (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
+                (str(row.get('_alerta_milvus', '')),        'milvus'),
             ]
-            for v, bg_fill, fc in alert_styles:
-                c = ws.cell(row=r, column=ci, value=v if v else "—")
+            for v, color_key in alert_vals:
+                bg, fc = ALERT_COLORS[color_key]
+                c = ws.cell(row=r, column=ci, value=v if v else "")
                 if v:
-                    c.fill = PatternFill("solid", fgColor=bg_fill)
+                    c.fill = PatternFill("solid", fgColor=bg)
                     c.font = Font(name='Arial', size=8, bold=True, color=fc)
                 else:
                     c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
-                    c.font = Font(name='Arial', size=8, color="BBBBBB")
+                    c.font = Font(name='Arial', size=8, color="CCCCCC")
                 c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                c.border = brd()
+                c.border    = brd()
                 ci += 1
 
-        r += 1
-
-    # Larguras
-    widths = [22, 9, 24, 36, 8, 14, 7]
-    if HAS_DATA_AT:
-        widths.append(18)
-    widths += [18, 22, 18, 22]
+    # ── Larguras ──────────────────────────────────────────────────────────────
+    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 22, 18, 28, 26]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
-
     ws.freeze_panes = 'A5'
 
-    # Rodape
-    r_foot = r
+    # ── Rodapé ────────────────────────────────────────────────────────────────
+    r_foot = len(alert_df) + 5
     ws.row_dimensions[r_foot].height = 20
-    ws.merge_cells(f'A{r_foot}:{get_column_letter(NCOLS - 3)}{r_foot}')
+    ws.merge_cells(f'A{r_foot}:{get_column_letter(NCOLS // 2)}{r_foot}')
     c = ws.cell(row=r_foot, column=1,
                 value=f"Total com alertas: {len(alert_df)}  |  Total no parque: {len(df)}")
     c.font      = Font(name='Arial', bold=True, size=9, color=NAVY)
@@ -452,5 +582,5 @@ def build_relatorio_interno(input_path, output_path):
     wb.save(output_path)
 
 
-# Alias
+# Alias retrocompatibilidade
 build_laudo = build_laudo_cliente
