@@ -18,7 +18,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_altcom365 import (classify, device_type, parse_uso, parse_storage,
-                               parse_ram, BADGE_COLORS)
+                               parse_ram, is_win_old, BADGE_COLORS)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -178,15 +178,31 @@ def _clean_precos(prec):
     parts = [p.strip() for p in str(prec).split(' | ') if p.strip() != _WIN_PRICE]
     return ' | '.join(parts) if parts else "NA"
 
-def _badge_cliente(classif, row):
-    """Badge exibido no laudo do cliente: sem menção a Windows/armazenamento."""
-    if classif == "CRÍTICO":
-        return "CRÍTICO"
-    ram     = parse_ram(row.get('Memória RAM total', 0))
-    storage = parse_storage(row.get('Armazenamento total', 0))
-    if ram < 8 or storage < 200:
-        return classif + " - Upgrade"
-    return classif
+def _motivos_upgrade(row):
+    """Retorna lista dos motivos que geraram sufixo '- Upgrade'.
+    Valores possíveis: 'so', 'ram', 'ssd'."""
+    motivos = []
+    if is_win_old(str(row.get('Sistema operacional', ''))):
+        motivos.append('so')
+    if parse_ram(row.get('Memória RAM total', 0)) < 8:
+        motivos.append('ram')
+    if parse_storage(row.get('Armazenamento total', 0)) < 200:
+        motivos.append('ssd')
+    return motivos
+
+
+def _badge_cliente(row):
+    """Badge para o laudo cliente.
+    '- Upgrade' por SO apenas → remove sufixo (decisão de TI, não do cliente).
+    '- Upgrade' por RAM/SSD   → mantém sufixo (impacto direto no uso do cliente).
+    '- Man. Prev.' e CRÍTICO   → mantidos sem alteração.
+    """
+    badge        = str(row.get('Badge', ''))
+    classif_base = str(row.get('Classificação', badge))
+    if '- Upgrade' in badge:
+        if _motivos_upgrade(row) == ['so']:
+            return classif_base  # só SO: sufixo removido
+    return badge
 
 def _parse_data_at(val):
     if val is None:
@@ -272,7 +288,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
                         if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop'
                         else "Notebook")
         classif_base = str(row.get('Classificação', ''))
-        badge_c      = str(row.get('Badge', classif_base))  # usa sufixo do engine
+        badge_c      = _badge_cliente(row)  # remove sufixo se upgrade for só SO
         uso_s        = _uso_display(row)
         st           = parse_storage(row.get('Armazenamento total', 0))
         st_s         = f"{st:.0f} GB SSD" if st > 0 else "N/D"
@@ -567,19 +583,4 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
 
-    # ── Rodapé ────────────────────────────────────────────────────────────────
-    r_foot = len(alert_df) + 5
-    ws.row_dimensions[r_foot].height = 20
-    ws.merge_cells(f'A{r_foot}:{get_column_letter(NCOLS // 2)}{r_foot}')
-    c = ws.cell(row=r_foot, column=1,
-                value=f"Total com alertas: {len(alert_df)}  |  Total no parque: {len(df)}")
-    c.font      = Font(name='Arial', bold=True, size=9, color=NAVY)
-    c.fill      = PatternFill("solid", fgColor="E8EDF2")
-    c.alignment = Alignment(horizontal='left', vertical='center', indent=1)
-    c.border    = brd()
-
-    wb.save(output_path)
-
-
-# Alias retrocompatibilidade
-build_laudo = build_laudo_cliente
+    # ── Rodapé ──────────────────────────────────────────────────────�
