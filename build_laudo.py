@@ -48,8 +48,7 @@ _DESC_REMOVE = [
     "Manutenção preventiva de armazenamento recomendada.",
     "Armazenamento em nível crítico — limpeza urgente necessária.",
 ]
-_SUG_REMOVE = {"Upgrade Windows 11 Pro", "Preventiva de armazenamento",
-               "Limpeza de armazenamento urgente"}
+_SUG_REMOVE = {"Upgrade Windows 11 Pro"}  # storage warnings kept for client
 _WIN_PRICE  = "R$ 145,00"
 
 # Cores de alerta interno
@@ -273,7 +272,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
                         if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop'
                         else "Notebook")
         classif_base = str(row.get('Classificação', ''))
-        badge_c      = _badge_cliente(classif_base, row)
+        badge_c      = str(row.get('Badge', classif_base))  # usa sufixo do engine
         uso_s        = _uso_display(row)
         st           = parse_storage(row.get('Armazenamento total', 0))
         st_s         = f"{st:.0f} GB SSD" if st > 0 else "N/D"
