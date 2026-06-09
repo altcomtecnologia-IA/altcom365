@@ -3,676 +3,569 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Laudo de Eficiência Técnica · Altcom Tecnologia</title>
+<title>Altcom 365 — Análise de Parque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0D1B2A;--navy2:#132336;--navy3:#1A2D42;
+  --cyan:#00C8D4;--cyan2:#00A8B4;
+  --white:#FFFFFF;--gray1:#F5F7FA;--gray2:#E8EDF2;--gray3:#C8D0DA;--gray4:#8899AA;
+  --green:#00B050;--yellow:#FFC000;--red:#C00000;--blue:#00B0F0;--orange:#92D050;
+  --radius:10px;--shadow:0 4px 20px rgba(0,0,0,.35);
+}
+html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family:'Inter',sans-serif;font-size:14px}
 
-  :root {
-    --navy:   #0D1B2A;
-    --cyan:   #00C8D4;
-    --white:  #FFFFFF;
-    --muted:  #8899AA;
-    --satisf: #FFC000;
-    --critico:#C00000;
-    --border: #D8E2EC;
-    --zebra:  #F0F4F8;
-  }
+/* ── Layout ── */
+.app{max-width:900px;margin:0 auto;padding:28px 20px 60px}
+.logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:32px}
+.logo-bar svg{flex-shrink:0}
+.logo-bar .brand{display:flex;flex-direction:column;gap:2px}
+.logo-bar .brand-name{font-size:22px;font-weight:700;color:var(--cyan);letter-spacing:-.3px}
+.logo-bar .brand-sub{font-size:12px;color:var(--gray4);font-weight:400}
 
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: 'Inter', sans-serif;
-    background: var(--navy);
-    color: var(--white);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-  body::before {
-    content: '';
-    position: fixed; inset: 0; z-index: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,200,212,.07) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,176,80,.05) 0%, transparent 60%);
-    pointer-events: none;
-  }
+/* ── Step indicator ── */
+.steps{display:flex;gap:0;margin-bottom:28px}
+.step{display:flex;align-items:center;gap:8px;padding:8px 14px 8px 10px;
+      border-radius:var(--radius);font-size:12px;font-weight:500;color:var(--gray4);
+      background:var(--navy2);flex:1;justify-content:center;position:relative}
+.step.active{color:var(--white);background:var(--navy3);border:1px solid var(--cyan)}
+.step.done{color:var(--cyan);background:var(--navy2);opacity:.7}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--navy3);
+          display:flex;align-items:center;justify-content:center;
+          font-size:11px;font-weight:700;flex-shrink:0}
+.step.active .step-num{background:var(--cyan);color:var(--navy)}
+.step.done .step-num{background:var(--cyan2);color:var(--navy)}
+.steps .sep{width:12px;height:2px;background:var(--navy3);align-self:center;flex-shrink:0;margin:0 2px}
 
-  .wrap {
-    position: relative; z-index: 1;
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 0 24px 80px;
-  }
+/* ── Cards ── */
+.card{background:var(--navy2);border-radius:var(--radius);padding:24px;margin-bottom:18px;
+      border:1px solid var(--navy3)}
 
-  /* ── HEADER ─────────────────────────────── */
-  header {
-    padding: 48px 0 36px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    border-bottom: 1px solid rgba(255,255,255,.07);
-    margin-bottom: 40px;
-  }
-  .logo-altcom  { display: flex; align-items: center; gap: 0; line-height: 1; }
-  .logo-divider { width:1px; height:36px; background:rgba(255,255,255,.2); margin:0 20px; flex-shrink:0; }
-  .logo-service { display:flex; flex-direction:column; gap:3px; }
-  .logo-service-title { font-size:15px; font-weight:600; color:var(--white); letter-spacing:-.1px; }
-  .logo-service-sub   { font-size:11px; font-weight:400; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; }
+/* ── Upload zone ── */
+.upload-zone{border:2px dashed var(--navy3);border-radius:var(--radius);padding:40px 20px;
+             text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--cyan);background:rgba(0,200,212,.04)}
+.upload-zone svg{margin-bottom:12px;opacity:.6}
+.upload-zone p{color:var(--gray4);font-size:13px;margin-top:6px}
+.upload-zone .file-hint{font-size:11px;color:var(--gray3);margin-top:4px}
+#file-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone .filename{font-size:13px;color:var(--cyan);font-weight:500;margin-top:8px}
 
-  /* ── HERO ────────────────────────────────── */
-  .hero { margin-bottom: 36px; }
-  .hero h2 {
-    font-size: clamp(26px, 4.5vw, 38px);
-    font-weight: 700; line-height: 1.15; letter-spacing: -.4px;
-    margin-bottom: 10px;
-  }
-  .hero h2 em { font-style:normal; color:var(--cyan); }
-  .hero p { font-size:14px; font-weight:400; color:var(--muted); line-height:1.65; max-width:520px; }
+/* ── Botões ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;
+     font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;
+     border:none;transition:all .18s;text-decoration:none}
+.btn-primary{background:var(--cyan);color:var(--navy)}
+.btn-primary:hover{background:var(--cyan2)}
+.btn-secondary{background:var(--navy3);color:var(--white);border:1px solid var(--gray3)}
+.btn-secondary:hover{background:var(--navy)}
+.btn-green{background:#1A6E3C;color:#fff}
+.btn-green:hover{background:#155932}
+.btn-blue{background:#0F4C75;color:#fff}
+.btn-blue:hover{background:#0C3D60}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
 
-  /* ── CARD ────────────────────────────────── */
-  .card {
-    background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.09);
-    border-radius: 16px;
-    padding: 32px;
-    backdrop-filter: blur(10px);
-  }
+/* ── Loading spinner ── */
+.spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.2);
+         border-top-color:var(--white);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ── DROP ZONE ───────────────────────────── */
-  .drop-zone {
-    border: 2px dashed rgba(0,200,212,.3);
-    border-radius: 12px;
-    padding: 44px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color .2s, background .2s;
-    position: relative;
-  }
-  .drop-zone:hover, .drop-zone.drag-over {
-    border-color: var(--cyan);
-    background: rgba(0,200,212,.05);
-  }
-  .drop-zone input[type="file"] {
-    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
-  }
-  .drop-icon {
-    width:48px; height:48px;
-    background:rgba(0,200,212,.1); border-radius:12px;
-    display:inline-grid; place-items:center; margin-bottom:14px;
-  }
-  .drop-icon svg { width:22px; height:22px; color:var(--cyan); }
-  .drop-zone h3  { font-size:15px; font-weight:600; margin-bottom:5px; }
-  .drop-zone p   { font-size:13px; color:var(--muted); }
-  .file-name {
-    display:none; margin-top:12px; padding:7px 14px;
-    background:rgba(0,200,212,.1); border-radius:8px;
-    font-size:13px; font-weight:500; color:var(--cyan);
-  }
+/* ── Erro / sucesso ── */
+.msg{padding:12px 16px;border-radius:8px;font-size:13px;margin-top:12px;display:none}
+.msg.error{background:rgba(192,0,0,.15);border:1px solid rgba(192,0,0,.4);color:#FF8888}
+.msg.success{background:rgba(0,176,80,.15);border:1px solid rgba(0,176,80,.4);color:#7FD96E}
+.msg.info{background:rgba(0,200,212,.08);border:1px solid rgba(0,200,212,.25);color:var(--cyan)}
 
-  /* ── BOTOES ──────────────────────────────── */
-  .btn {
-    display:inline-flex; align-items:center; gap:10px;
-    background:var(--cyan); color:var(--navy);
-    font-family:'Inter',sans-serif; font-size:14px; font-weight:700;
-    padding:13px 28px; border-radius:10px; border:none; cursor:pointer;
-    transition:opacity .2s, transform .1s;
-    text-decoration:none; width:100%; justify-content:center; letter-spacing:.1px;
-    margin-top:20px;
-  }
-  .btn:hover  { opacity:.88; }
-  .btn:active { transform:scale(.98); }
-  .btn:disabled { opacity:.3; cursor:not-allowed; }
-  .btn svg { width:16px; height:16px; }
+/* ── Client list ── */
+.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:14px}
+.client-item{display:flex;align-items:center;gap:10px;padding:10px 12px;
+             background:var(--navy3);border-radius:8px;cursor:pointer;
+             border:1px solid transparent;transition:all .15s}
+.client-item:hover{border-color:var(--gray3)}
+.client-item.selected{border-color:var(--cyan);background:#0F2236}
+.client-item input[type=checkbox]{accent-color:var(--cyan);width:15px;height:15px;cursor:pointer;flex-shrink:0}
+.client-item .cli-name{flex:1;font-size:12px;font-weight:500;line-height:1.3}
+.client-item .cli-count{font-size:11px;color:var(--gray4);background:var(--navy2);
+                         padding:2px 7px;border-radius:20px;flex-shrink:0}
+.sel-controls{display:flex;gap:10px;margin-bottom:8px}
+.sel-controls a{font-size:12px;color:var(--cyan);cursor:pointer;text-decoration:underline}
+.sel-counter{font-size:12px;color:var(--gray4);margin-left:auto}
 
-  .btn-download {
-    background:transparent; color:var(--cyan);
-    border:2px solid var(--cyan);
-  }
-  .btn-download:hover { background:rgba(0,200,212,.07); opacity:1; }
+/* ── Preview resumo ── */
+.section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+               color:var(--gray3);margin-bottom:14px;padding-bottom:8px;
+               border-bottom:1px solid var(--navy3)}
+.classif-bar{display:flex;flex-direction:column;gap:6px}
+.classif-row{display:flex;align-items:center;gap:10px}
+.classif-badge{width:100px;padding:4px 0;border-radius:5px;text-align:center;
+               font-size:11px;font-weight:700;flex-shrink:0}
+.classif-track{flex:1;height:10px;background:var(--navy3);border-radius:5px;overflow:hidden}
+.classif-fill{height:100%;border-radius:5px;transition:width .4s ease}
+.classif-info{width:90px;font-size:11px;color:var(--gray4);text-align:right;flex-shrink:0}
+.classif-tags{display:flex;gap:4px;flex-shrink:0;width:100px}
+.tag{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600}
+.tag-mp{background:rgba(255,192,0,.2);color:#FFC000}
+.tag-up{background:rgba(0,176,80,.2);color:#00B050}
 
-  .btn-interno {
-    background:transparent; color:#60A5FA;
-    border:2px solid #60A5FA;
-    margin-top:12px;
-  }
-  .btn-interno:hover { background:rgba(96,165,250,.07); opacity:1; }
+/* ── Alert cards ── */
+.alert-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.alert-card{background:var(--navy3);border-radius:8px;padding:14px 16px;
+            border-left:3px solid transparent}
+.alert-card .ac-count{font-size:26px;font-weight:700;line-height:1.1}
+.alert-card .ac-label{font-size:11px;color:var(--gray4);margin-top:3px;line-height:1.3}
+.ac-armaz{border-color:#C0392B}.ac-armaz .ac-count{color:#E74C3C}
+.ac-windows{border-color:#D4AC0D}.ac-windows .ac-count{color:#F7DC6F}
+.ac-troca{border-color:#922B21}.ac-troca .ac-count{color:#E59866}
+.ac-contato{border-color:#2874A6}.ac-contato .ac-count{color:#7FB3D3}
+.ac-milvus{border-color:#5D6D7E}.ac-milvus .ac-count{color:#AAB7B8}
 
-  /* ── SPINNER ─────────────────────────────── */
-  .spinner {
-    display:none; width:16px; height:16px;
-    border:2px solid rgba(13,27,42,.25); border-top-color:var(--navy);
-    border-radius:50%; animation:spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform:rotate(360deg); } }
+/* ── Milvus info ── */
+.milvus-box{background:var(--navy3);border-radius:8px;padding:14px 16px;
+            margin-top:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.milvus-box .mv-label{font-size:12px;color:var(--gray4)}
+.milvus-box .mv-ver{font-size:15px;font-weight:700;color:var(--cyan)}
+.milvus-box .mv-stat{font-size:12px;color:var(--gray3)}
+.mv-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;margin-left:auto}
+.mv-badge.yellow{background:rgba(255,192,0,.2);color:#FFC000;border:1px solid rgba(255,192,0,.4)}
+.mv-badge.blue{background:rgba(0,176,240,.12);color:#00B0F0;border:1px solid rgba(0,176,240,.3)}
+.mv-na{font-size:12px;color:var(--gray4);font-style:italic}
 
-  /* ── PREVIEW CONTAINER ───────────────────── */
-  #preview {
-    display:none; margin-top:24px;
-    animation:fadeUp .35s ease both;
-  }
-  @keyframes fadeUp {
-    from { opacity:0; transform:translateY(10px); }
-    to   { opacity:1; transform:translateY(0); }
-  }
+/* ── Download section ── */
+.download-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:18px}
+.dl-card{flex:1;min-width:200px;background:var(--navy3);border-radius:8px;
+         padding:18px;border:1px solid var(--navy3)}
+.dl-card .dl-icon{font-size:24px;margin-bottom:8px}
+.dl-card .dl-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.dl-card .dl-desc{font-size:11px;color:var(--gray4);margin-bottom:14px;line-height:1.5}
 
-  /* ── BLOCO CLIENTE ───────────────────────── */
-  .preview-block {
-    margin-bottom: 0;
-  }
-  .preview-block + .preview-block {
-    margin-top: 28px;
-    padding-top: 24px;
-    border-top: 1px solid rgba(255,255,255,.07);
-  }
-
-  .preview-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 10px;
-  }
-
-  .preview-header {
-    display:flex; align-items:baseline; gap:10px;
-    margin-bottom: 16px;
-  }
-  .preview-header h3 { font-size:16px; font-weight:600; }
-  .preview-header .total { font-size:13px; color:var(--muted); }
-
-  /* ── BARRAS CLIENTE ──────────────────────── */
-  .bars { display:flex; flex-direction:column; gap:9px; }
-  .bar-row {
-    display:grid;
-    grid-template-columns:130px 1fr 50px 84px;
-    align-items:center; gap:12px;
-  }
-  .bar-label {
-    font-size:11px; font-weight:700; letter-spacing:.3px;
-    padding:4px 10px; border-radius:6px;
-    text-align:center; white-space:nowrap;
-  }
-  .bar-track {
-    height:7px; background:rgba(255,255,255,.07);
-    border-radius:999px; overflow:hidden;
-  }
-  .bar-fill {
-    height:100%; border-radius:999px;
-    transition:width .55s cubic-bezier(.4,0,.2,1);
-  }
-  .bar-count { font-size:19px; font-weight:800; text-align:right; }
-  .bar-tags  { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
-  .tag { font-size:10px; font-weight:600; padding:2px 7px; border-radius:999px; white-space:nowrap; }
-  .tag.mp  { background:rgba(0,200,212,.14); color:var(--cyan); }
-  .tag.upg { background:rgba(255,192,0,.14);  color:var(--satisf); }
-
-  /* ── BLOCO ALERTAS INTERNOS ──────────────── */
-  .alerts-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 4px;
-  }
-
-  .alert-card {
-    border-radius: 10px;
-    padding: 16px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    border: 1px solid;
-  }
-
-  .alert-card.armazenamento {
-    background: rgba(156,0,6,.1);
-    border-color: rgba(156,0,6,.3);
-  }
-  .alert-card.windows {
-    background: rgba(127,96,0,.1);
-    border-color: rgba(127,96,0,.3);
-  }
-  .alert-card.milvus {
-    background: rgba(31,78,121,.15);
-    border-color: rgba(96,165,250,.25);
-  }
-  .alert-card.milvus-off {
-    background: rgba(255,255,255,.03);
-    border-color: rgba(255,255,255,.06);
-    opacity: .5;
-  }
-  .alert-card.troca {
-    background: rgba(127,0,0,.1);
-    border-color: rgba(252,165,165,.2);
-  }
-  .alert-card.troca .alert-icon { background: rgba(252,165,165,.15); }
-  .alert-card.troca .alert-count { color: #FCA5A5; }
-
-  .alert-icon {
-    width: 28px; height: 28px;
-    border-radius: 8px;
-    display: grid; place-items: center;
-    flex-shrink: 0;
-  }
-  .alert-card.armazenamento .alert-icon { background: rgba(156,0,6,.25); }
-  .alert-card.windows       .alert-icon { background: rgba(255,192,0,.2); }
-  .alert-card.milvus        .alert-icon { background: rgba(96,165,250,.2); }
-  .alert-card.milvus-off    .alert-icon { background: rgba(255,255,255,.06); }
-
-  .alert-count {
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1;
-    margin-top: 4px;
-  }
-  .alert-card.armazenamento .alert-count { color: #FF9999; }
-  .alert-card.windows       .alert-count { color: #FFD966; }
-  .alert-card.milvus        .alert-count { color: #93C5FD; }
-  .alert-card.milvus-off    .alert-count { color: var(--muted); }
-
-  .alert-title {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .2px;
-    color: var(--white);
-  }
-  .alert-sub {
-    font-size: 10px;
-    color: var(--muted);
-    line-height: 1.4;
-  }
-
-  /* ── ERROR ───────────────────────────────── */
-  #error-msg {
-    display:none; margin-top:14px; padding:13px 16px;
-    background:rgba(192,0,0,.12); border:1px solid rgba(192,0,0,.35);
-    border-radius:8px; font-size:13px; color:#ff9999;
-    animation:fadeUp .3s ease both;
-  }
-
-  /* ── STEPS ───────────────────────────────── */
-  .steps {
-    display:grid; grid-template-columns:repeat(3,1fr);
-    gap:14px; margin-top:36px;
-  }
-  .step {
-    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
-    border-radius:12px; padding:20px 18px;
-  }
-  .step-num { font-size:28px; font-weight:800; color:rgba(0,200,212,.25); line-height:1; margin-bottom:8px; }
-  .step h4  { font-size:13px; font-weight:600; margin-bottom:4px; }
-  .step p   { font-size:12px; color:var(--muted); line-height:1.5; }
-
-  @media (max-width:600px) {
-    .steps         { grid-template-columns:1fr; }
-    .bar-row       { grid-template-columns:110px 1fr 36px; }
-    .bar-tags      { display:none; }
-    .card          { padding:20px; }
-    .logo-divider  { margin:0 14px; height:28px; }
-    .alerts-grid   { grid-template-columns:1fr; }
-  }
+/* ── Utilities ── */
+.hidden{display:none!important}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.total-badge{font-size:12px;background:rgba(0,200,212,.12);color:var(--cyan);
+             padding:3px 10px;border-radius:20px;font-weight:500}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="app">
 
-  <header>
-    <div class="logo-altcom">
-      <svg width="148" height="40" viewBox="0 0 148 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="orbGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#00D4C8"/>
-            <stop offset="100%" stop-color="#0098A0"/>
-          </linearGradient>
-        </defs>
-        <circle cx="20" cy="20" r="19" fill="url(#orbGrad)"/>
-        <path d="M11 27 L20 10 L29 27" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        <path d="M14.5 21.5 L25.5 21.5" stroke="white" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-        <path d="M20 10 L17.5 15.5 L20 13.5 L22.5 15.5 Z" fill="white" opacity=".9"/>
-        <text x="46" y="16" font-family="Inter,sans-serif" font-size="13" font-weight="800" fill="#00C8D4" letter-spacing="1.5">ALTCOM</text>
-        <text x="46" y="31" font-family="Inter,sans-serif" font-size="9.5" font-weight="500" fill="#8899AA" letter-spacing="2.8">TECNOLOGIA</text>
-      </svg>
-      <div class="logo-divider"></div>
-      <div class="logo-service">
-        <span class="logo-service-title">Laudo de Eficiência Técnica</span>
-        <span class="logo-service-sub">Altcom Tecnologia</span>
-      </div>
+  <!-- Logo -->
+  <div class="logo-bar">
+    <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="42" height="42" rx="10" fill="#132336"/>
+      <path d="M21 8L34 32H8L21 8Z" fill="#00C8D4" opacity=".9"/>
+      <path d="M21 14L30 30H12L21 14Z" fill="#0D1B2A"/>
+      <circle cx="21" cy="26" r="3" fill="#00C8D4"/>
+    </svg>
+    <div class="brand">
+      <span class="brand-name">Altcom 365</span>
+      <span class="brand-sub">Análise de Parque — v2.0</span>
     </div>
-  </header>
-
-  <div class="hero">
-    <h2>Análise completa do<br>parque de <em>estações de trabalho</em></h2>
-    <p>Importe o export analítico do Milvus. Em segundos o laudo é gerado com classificação, diagnóstico e recomendações de upgrade por dispositivo.</p>
   </div>
 
-  <div class="card">
-    <div class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <div class="drop-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="step1-ind">
+      <div class="step-num">1</div>Upload
+    </div>
+    <div class="sep"></div>
+    <div class="step" id="step2-ind">
+      <div class="step-num">2</div>Clientes
+    </div>
+    <div class="sep"></div>
+    <div class="step" id="step3-ind">
+      <div class="step-num">3</div>Preview &amp; Download
+    </div>
+  </div>
+
+  <!-- ── ETAPA 1: Upload ─────────────────────────────────────────────────── -->
+  <div id="section-upload">
+    <div class="card">
+      <div class="section-title">Relatório Milvus Completo</div>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".xlsx,.xls">
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none"
+             stroke="#00C8D4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/>
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
+        <p>Arraste o arquivo aqui ou clique para selecionar</p>
+        <div class="file-hint">Relatório Milvus Completo (.xlsx) — todos os clientes</div>
+        <div class="filename" id="filename-display" style="display:none"></div>
       </div>
-      <h3>Arraste o arquivo aqui</h3>
-      <p>ou clique para selecionar &nbsp;·&nbsp; .xlsx</p>
-      <div class="file-name" id="fileName"></div>
-    </div>
-
-    <button class="btn" id="btnGerar" disabled>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 8 12 12 14 14"/>
-      </svg>
-      <span id="btnLabel">Selecione um arquivo</span>
-      <div class="spinner" id="spinner"></div>
-    </button>
-
-    <div id="error-msg"></div>
-
-    <!-- PREVIEW ─────────────────────────────────────────── -->
-    <div id="preview">
-
-      <!-- Bloco 1: Resumo para o Cliente -->
-      <div class="preview-block">
-        <div class="preview-label">Resumo para o Cliente</div>
-        <div class="preview-header">
-          <h3 id="previewCliente">—</h3>
-          <span class="total" id="previewTotal"></span>
-        </div>
-        <div class="bars" id="barsContainer"></div>
-
-        <button class="btn btn-download" id="btnDownload" style="margin-top:18px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          <span id="lblDownload">Baixar Laudo — Cliente</span>
+      <div class="msg" id="upload-msg"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-upload">
+          <span class="spinner" id="spinner-upload"></span>
+          <span id="btn-upload-text">Carregar Arquivo</span>
         </button>
       </div>
-
-      <!-- Bloco 2: Alertas Internos -->
-      <div class="preview-block" id="blockAlertas">
-        <div class="preview-label">Alertas Internos — Analistas</div>
-
-        <div class="alerts-grid">
-          <!-- Armazenamento crítico -->
-          <div class="alert-card armazenamento">
-            <div class="alert-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF9999" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-              </svg>
-            </div>
-            <div class="alert-count" id="countArmazenamento">—</div>
-            <div class="alert-title">Armazenamento crítico</div>
-            <div class="alert-sub">Uso acima de 70%</div>
-          </div>
-
-          <!-- Windows desatualizado -->
-          <div class="alert-card windows">
-            <div class="alert-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD966" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="8" height="8"/>
-                <rect x="13" y="3" width="8" height="8"/>
-                <rect x="3" y="13" width="8" height="8"/>
-                <rect x="13" y="13" width="8" height="8"/>
-              </svg>
-            </div>
-            <div class="alert-count" id="countWindows">—</div>
-            <div class="alert-title">Windows desatualizado</div>
-            <div class="alert-sub">S.O. anterior ao Win 11</div>
-          </div>
-
-          <!-- Laudados para Troca -->
-          <div class="alert-card troca" id="cardTroca" style="display:none">
-            <div class="alert-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-              </svg>
-            </div>
-            <div class="alert-count" id="countTroca">0</div>
-            <div class="alert-title">Laudados para Troca</div>
-            <div class="alert-sub">CRÍTICO com alertas — sem procedimento</div>
-          </div>
-
-          <!-- Agente Milvus -->
-          <div class="alert-card" id="cardMilvus">
-            <div class="alert-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#93C5FD" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-            <div class="alert-count" id="countMilvus">—</div>
-            <div class="alert-title">Agente Milvus</div>
-            <div class="alert-sub" id="subMilvus">Sem contato há mais de 40 dias</div>
-          </div>
-        </div>
-
-        <button class="btn btn-interno" id="btnInterno" style="margin-top:18px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          <span id="lblInterno">Baixar Relatório Interno — Altcom</span>
-        </button>
-      </div>
-
-    </div><!-- /preview -->
-  </div>
-
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">01</div>
-      <h4>Exporte do Milvus</h4>
-      <p>Dispositivo por Cliente Analítico — formato .xlsx</p>
-    </div>
-    <div class="step">
-      <div class="step-num">02</div>
-      <h4>Faça o upload</h4>
-      <p>Arraste o arquivo ou clique para selecionar</p>
-    </div>
-    <div class="step">
-      <div class="step-num">03</div>
-      <h4>Baixe os laudos</h4>
-      <p>Laudo do Cliente + Relatório Interno com alertas operacionais</p>
     </div>
   </div>
 
-</div>
+  <!-- ── ETAPA 2: Seleção de clientes ───────────────────────────────────── -->
+  <div id="section-clientes" class="hidden">
+    <div class="card">
+      <div class="section-title">
+        Selecionar Clientes
+        <span class="total-badge" id="total-disp-badge" style="margin-left:8px"></span>
+      </div>
+      <div class="sel-controls">
+        <a onclick="toggleAll(true)">Selecionar todos</a>
+        <a onclick="toggleAll(false)">Limpar</a>
+        <span class="sel-counter" id="sel-counter">0 selecionados</span>
+      </div>
+      <div class="client-grid" id="client-grid"></div>
+      <div class="msg" id="clientes-msg"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-voltar">← Novo upload</button>
+        <button class="btn btn-primary" id="btn-processar">
+          <span class="spinner" id="spinner-processar"></span>
+          <span id="btn-processar-text">Processar Selecionados</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ETAPA 3: Preview + Download ────────────────────────────────────── -->
+  <div id="section-preview" class="hidden">
+
+    <!-- Bloco A: Resumo para o Cliente -->
+    <div class="card">
+      <div class="section-title">
+        Resumo para o Cliente
+        <span class="total-badge" id="total-preview-badge" style="margin-left:8px"></span>
+      </div>
+      <div class="classif-bar" id="classif-bar"></div>
+    </div>
+
+    <!-- Bloco B: Alertas Internos -->
+    <div class="card">
+      <div class="section-title">Alertas Internos — Analistas</div>
+      <div class="alert-grid" id="alert-grid"></div>
+      <div id="milvus-block"></div>
+    </div>
+
+    <!-- Download -->
+    <div class="card">
+      <div class="section-title">Gerar Arquivos</div>
+      <div class="download-row">
+        <div class="dl-card">
+          <div class="dl-icon">📋</div>
+          <div class="dl-title">Laudos para o Cliente</div>
+          <div class="dl-desc">1 Excel por cliente selecionado com classificação, durabilidade e sugestões de upgrade de hardware.</div>
+          <button class="btn btn-green" id="btn-laudos">
+            <span class="spinner" id="spinner-laudos"></span>
+            <span id="btn-laudos-text">↓ Baixar ZIP — Laudos</span>
+          </button>
+        </div>
+        <div class="dl-card">
+          <div class="dl-icon">🔧</div>
+          <div class="dl-title">Relatórios Internos</div>
+          <div class="dl-desc">1 Excel por cliente com alertas operacionais: armazenamento, SO, contato e agente Milvus.</div>
+          <button class="btn btn-blue" id="btn-internos">
+            <span class="spinner" id="spinner-internos"></span>
+            <span id="btn-internos-text">↓ Baixar ZIP — Internos</span>
+          </button>
+        </div>
+      </div>
+      <div class="msg" id="download-msg"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-voltar2">← Mudar seleção</button>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /app -->
 
 <script>
-const dropZone    = document.getElementById('dropZone');
-const fileInput   = document.getElementById('fileInput');
-const btnGerar    = document.getElementById('btnGerar');
-const btnLabel    = document.getElementById('btnLabel');
-const spinner     = document.getElementById('spinner');
-const fileName    = document.getElementById('fileName');
-const previewDiv  = document.getElementById('preview');
-const errorMsg    = document.getElementById('error-msg');
-const btnDownload = document.getElementById('btnDownload');
-const btnInterno  = document.getElementById('btnInterno');
+// ── Estado global ─────────────────────────────────────────────────────────────
+let clientesDisponiveis = [];
+let contagemClientes    = {};
+let clientesSelecionados = [];
 
-let selectedFile = null;
+// ── Navegação entre etapas ────────────────────────────────────────────────────
+function showStep(n) {
+  document.getElementById('section-upload').classList.toggle('hidden', n !== 1);
+  document.getElementById('section-clientes').classList.toggle('hidden', n !== 2);
+  document.getElementById('section-preview').classList.toggle('hidden', n !== 3);
+  ['step1-ind','step2-ind','step3-ind'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i + 1 === n) el.classList.add('active');
+    else if (i + 1 < n) el.classList.add('done');
+  });
+}
 
-// Drag & drop
-['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => {
-  ev.preventDefault(); dropZone.classList.add('drag-over');
-}));
-['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
-  ev.preventDefault(); dropZone.classList.remove('drag-over');
-}));
-dropZone.addEventListener('drop', ev => {
-  const f = ev.dataTransfer.files[0];
-  if (f) setFile(f);
+// ── Upload zone ───────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) { fileInput.files = e.dataTransfer.files; updateFilename(file.name); }
 });
 fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) setFile(fileInput.files[0]);
+  if (fileInput.files[0]) updateFilename(fileInput.files[0].name);
 });
-
-function setFile(f) {
-  selectedFile = f;
-  fileName.textContent = f.name;
-  fileName.style.display = 'inline-block';
-  btnGerar.disabled = false;
-  btnLabel.textContent = 'Gerar Pré-visualização';
-  previewDiv.style.display = 'none';
-  hideError();
+function updateFilename(name) {
+  const el = document.getElementById('filename-display');
+  el.textContent = '📎 ' + name;
+  el.style.display = 'block';
 }
 
-// Preview
-btnGerar.addEventListener('click', async () => {
-  if (!selectedFile) return;
-  setLoading(true); hideError();
-  const fd = new FormData();
-  fd.append('arquivo', selectedFile);
-  try {
-    const res  = await fetch('/preview', { method:'POST', body:fd });
-    const data = await res.json();
-    if (data.erro) { showError(data.erro); setLoading(false); return; }
-    renderPreview(data);
-    previewDiv.style.display = 'block';
-    btnLabel.textContent = 'Atualizar';
-  } catch (e) {
-    showError('Erro de comunicação com o servidor.');
+// ── Helpers de UI ─────────────────────────────────────────────────────────────
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + type;
+  el.style.display = 'block';
+}
+function hideMsg(id) {
+  const el = document.getElementById(id);
+  el.style.display = 'none';
+}
+function setLoading(btnId, spinnerId, textId, isLoading, defaultText) {
+  document.getElementById(btnId).disabled = isLoading;
+  document.getElementById(spinnerId).style.display = isLoading ? 'block' : 'none';
+  document.getElementById(textId).textContent = isLoading ? 'Processando...' : defaultText;
+}
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href    = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+// ── ETAPA 1: Upload ───────────────────────────────────────────────────────────
+document.getElementById('btn-upload').addEventListener('click', async () => {
+  if (!fileInput.files[0]) {
+    showMsg('upload-msg', 'Selecione um arquivo .xlsx primeiro.', 'error');
+    return;
   }
-  setLoading(false);
-});
+  hideMsg('upload-msg');
+  setLoading('btn-upload','spinner-upload','btn-upload-text', true, 'Carregar Arquivo');
 
-// Download laudo cliente
-btnDownload.addEventListener('click', () => downloadFile('/gerar', 'lblDownload', 'Baixar Laudo — Cliente'));
+  const form = new FormData();
+  form.append('arquivo', fileInput.files[0]);
 
-// Download relatório interno
-btnInterno.addEventListener('click', () => downloadFile('/gerar/interno', 'lblInterno', 'Baixar Relatório Interno — Altcom'));
-
-async function downloadFile(url, lblId, lblDefault) {
-  if (!selectedFile) return;
-  const lbl = document.getElementById(lblId);
-  const btn = lblId === 'lblDownload' ? btnDownload : btnInterno;
-  btn.disabled = true;
-  if (lbl) lbl.textContent = 'Gerando...';
-  const fd = new FormData();
-  fd.append('arquivo', selectedFile);
   try {
-    const res = await fetch(url, { method:'POST', body:fd });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      showError(j.erro || 'Erro ao gerar o arquivo.');
-      btn.disabled = false;
-      if (lbl) lbl.textContent = lblDefault;
-      return;
+    const resp = await fetch('/upload-completo', { method:'POST', body: form });
+    const data = await resp.json();
+    if (data.erro) {
+      showMsg('upload-msg', data.erro, 'error');
+    } else {
+      clientesDisponiveis = data.clientes;
+      contagemClientes    = data.contagem;
+      renderClientGrid();
+      document.getElementById('total-disp-badge').textContent =
+        data.total_dispositivos + ' dispositivos · ' + data.clientes.length + ' clientes';
+      showStep(2);
     }
-    const blob  = await res.blob();
-    const cd    = res.headers.get('Content-Disposition') || '';
-    const match = cd.match(/filename="?([^"]+)"?/);
-    const name  = match ? match[1] : 'Altcom_Export.xlsx';
-    const a     = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = name; a.click();
-    URL.revokeObjectURL(a.href);
-  } catch (e) {
-    showError('Erro ao baixar o arquivo.');
+  } catch(e) {
+    showMsg('upload-msg', 'Erro de conexão: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-upload','spinner-upload','btn-upload-text', false, 'Carregar Arquivo');
   }
-  btn.disabled = false;
-  if (lbl) lbl.textContent = lblDefault;
+});
+
+// ── ETAPA 2: Seleção de clientes ──────────────────────────────────────────────
+function renderClientGrid() {
+  const grid = document.getElementById('client-grid');
+  grid.innerHTML = '';
+  clientesDisponiveis.forEach(cli => {
+    const item = document.createElement('div');
+    item.className = 'client-item';
+    item.innerHTML = `
+      <input type="checkbox" id="chk_${CSS.escape(cli)}" value="${cli}">
+      <label class="cli-name" for="chk_${CSS.escape(cli)}">${cli}</label>
+      <span class="cli-count">${contagemClientes[cli] || 0}</span>`;
+    item.querySelector('input').addEventListener('change', updateSelection);
+    item.addEventListener('click', e => {
+      if (e.target.tagName !== 'INPUT') {
+        const cb = item.querySelector('input');
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      }
+    });
+    grid.appendChild(item);
+  });
+  toggleAll(true);
 }
 
-// Render preview
+function updateSelection() {
+  clientesSelecionados = Array.from(
+    document.querySelectorAll('#client-grid input:checked')
+  ).map(cb => cb.value);
+
+  document.querySelectorAll('#client-grid .client-item').forEach(item => {
+    const cb = item.querySelector('input');
+    item.classList.toggle('selected', cb.checked);
+  });
+  document.getElementById('sel-counter').textContent =
+    clientesSelecionados.length + ' selecionados';
+  hideMsg('clientes-msg');
+}
+
+function toggleAll(state) {
+  document.querySelectorAll('#client-grid input').forEach(cb => { cb.checked = state; });
+  updateSelection();
+}
+
+document.getElementById('btn-voltar').addEventListener('click', () => {
+  showStep(1);
+  fileInput.value = '';
+  document.getElementById('filename-display').style.display = 'none';
+});
+
+document.getElementById('btn-processar').addEventListener('click', async () => {
+  if (clientesSelecionados.length === 0) {
+    showMsg('clientes-msg', 'Selecione pelo menos um cliente.', 'error');
+    return;
+  }
+  hideMsg('clientes-msg');
+  setLoading('btn-processar','spinner-processar','btn-processar-text', true, 'Processar Selecionados');
+
+  try {
+    const resp = await fetch('/preview-clientes', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ clientes: clientesSelecionados }),
+    });
+    const data = await resp.json();
+    if (data.erro) {
+      showMsg('clientes-msg', data.erro, 'error');
+    } else {
+      renderPreview(data);
+      showStep(3);
+    }
+  } catch(e) {
+    showMsg('clientes-msg', 'Erro de conexão: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-processar','spinner-processar','btn-processar-text', false, 'Processar Selecionados');
+  }
+});
+
+// ── ETAPA 3: Preview ──────────────────────────────────────────────────────────
 function renderPreview(data) {
-  document.getElementById('previewCliente').textContent = data.cliente;
-  document.getElementById('previewTotal').textContent   = data.total + ' dispositivos';
+  const total = data.total;
+  document.getElementById('total-preview-badge').textContent =
+    total + ' dispositivos · ' + data.clientes_selecionados.length + ' clientes';
 
-  // Barras cliente
-  const container = document.getElementById('barsContainer');
-  container.innerHTML = '';
-  data.resumo.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-
-    const lbl = document.createElement('div');
-    lbl.className = 'bar-label';
-    lbl.textContent = item.label;
-    lbl.style.background = '#' + item.bg + '20';
-    lbl.style.color = '#' + item.bg;
-    lbl.style.border = '1px solid #' + item.bg + '50';
-
-    const track = document.createElement('div');
-    track.className = 'bar-track';
-    const fill = document.createElement('div');
-    fill.className = 'bar-fill';
-    fill.style.background = '#' + item.bg;
-    fill.style.width = '0%';
-    track.appendChild(fill);
-    setTimeout(() => { fill.style.width = item.pct + '%'; }, 80);
-
-    const cnt = document.createElement('div');
-    cnt.className = 'bar-count';
-    cnt.textContent = item.qtd;
-    cnt.style.color = '#' + item.bg;
-
-    const tags = document.createElement('div');
-    tags.className = 'bar-tags';
-    if (item.man_prev > 0) {
-      const t = document.createElement('span');
-      t.className = 'tag mp';
-      t.textContent = item.man_prev + ' Man. Prev.';
-      tags.appendChild(t);
-    }
-    if (item.upgrade > 0) {
-      const t = document.createElement('span');
-      t.className = 'tag upg';
-      t.textContent = item.upgrade + ' Upgrade';
-      tags.appendChild(t);
-    }
-    row.appendChild(lbl); row.appendChild(track);
-    row.appendChild(cnt); row.appendChild(tags);
-    container.appendChild(row);
+  // Bloco A — Classificações
+  const bar = document.getElementById('classif-bar');
+  bar.innerHTML = '';
+  (data.resumo || []).forEach(r => {
+    const tags = [
+      r.man_prev ? `<span class="tag tag-mp">Man.Prev. ${r.man_prev}</span>` : '',
+      r.upgrade  ? `<span class="tag tag-up">Upgrade ${r.upgrade}</span>` : '',
+    ].join('');
+    bar.innerHTML += `
+      <div class="classif-row">
+        <div class="classif-badge" style="background:#${r.bg};color:#${r.fg}">${r.label}</div>
+        <div class="classif-track"><div class="classif-fill" style="width:${r.pct}%;background:#${r.bg}"></div></div>
+        <div class="classif-info">${r.qtd} (${r.pct}%)</div>
+        <div class="classif-tags">${tags}</div>
+      </div>`;
   });
 
-  // Alertas internos
-  const al = data.alertas || {};
-  document.getElementById('countArmazenamento').textContent = al.armazenamento ?? 0;
-  document.getElementById('countWindows').textContent       = al.windows       ?? 0;
-  document.getElementById('countMilvus').textContent        = al.milvus        ?? 0;
+  // Bloco B — Alertas
+  const al    = data.alertas || {};
+  const grid  = document.getElementById('alert-grid');
+  grid.innerHTML = '';
 
-  const cardMilvus = document.getElementById('cardMilvus');
-  if (!al.tem_milvus) {
-    cardMilvus.className = 'alert-card milvus-off';
-    document.getElementById('subMilvus').textContent = 'Coluna não disponível no arquivo';
+  const cards = [
+    { key:'armazenamento', cls:'ac-armaz',   icon:'💾', label:'Armazenamento\ncrítico (>70%)' },
+    { key:'windows',       cls:'ac-windows', icon:'🪟', label:'Windows\ndesatualizado' },
+    { key:'laudados_troca',cls:'ac-troca',   icon:'🔴', label:'Laudados\npara Troca' },
+    { key:'sem_contato',   cls:'ac-contato', icon:'📡', label:'Sem contato\n> 20 dias' },
+    { key:'milvus',        cls:'ac-milvus',  icon:'🤖', label:'Agente Milvus\ndesatualizado' },
+  ];
+
+  cards.forEach(c => {
+    const count = al[c.key] || 0;
+    if (c.key === 'laudados_troca' && count === 0) return;
+    const opacity = (c.key === 'sem_contato' && !al.tem_data_at) ||
+                    (c.key === 'milvus'       && !al.tem_versao)  ? 'opacity:.4' : '';
+    const label = (c.key === 'sem_contato' && !al.tem_data_at)
+      ? 'Sem contato\n(dados indisponíveis)' : c.label;
+    grid.innerHTML += `
+      <div class="alert-card ${c.cls}" style="${opacity}">
+        <div class="ac-count">${count}</div>
+        <div class="ac-label">${c.icon} ${label.replace('\n','<br>')}</div>
+      </div>`;
+  });
+
+  // Milvus info
+  const mi  = data.milvus_info || {};
+  const mb  = document.getElementById('milvus-block');
+  if (mi.versao_ref) {
+    mb.innerHTML = `
+      <div class="milvus-box">
+        <div>
+          <div class="mv-label">Versão de referência do agente</div>
+          <div class="mv-ver">${mi.versao_ref}</div>
+          <div class="mv-stat">${mi.n_desatualizadas} máquinas em versão antiga (${mi.pct}% do parque)</div>
+        </div>
+        <span class="mv-badge ${mi.badge}">${mi.label}</span>
+      </div>`;
   } else {
-    cardMilvus.className = 'alert-card milvus';
-    document.getElementById('subMilvus').textContent = 'Sem contato há mais de 40 dias';
-  }
-
-  // Card "Laudados para Troca" — só exibe se houver ao menos 1
-  const cardTroca = document.getElementById('cardTroca');
-  const nTroca = al.laudados_troca ?? 0;
-  if (nTroca > 0) {
-    document.getElementById('countTroca').textContent = nTroca;
-    cardTroca.style.display = '';
-  } else {
-    cardTroca.style.display = 'none';
+    mb.innerHTML = `<div class="milvus-box"><span class="mv-na">Dados de DATA DE ATUALIZAÇÃO ausentes — alerta de agente não calculado</span></div>`;
   }
 }
 
-function setLoading(on) {
-  btnGerar.disabled = on;
-  spinner.style.display = on ? 'block' : 'none';
-  if (on) btnLabel.textContent = 'Processando...';
+// ── ETAPA 3: Downloads ────────────────────────────────────────────────────────
+async function downloadZip(route, btnId, spinnerId, textId, defaultText, filename) {
+  if (clientesSelecionados.length === 0) {
+    showMsg('download-msg', 'Nenhum cliente selecionado.', 'error');
+    return;
+  }
+  hideMsg('download-msg');
+  setLoading(btnId, spinnerId, textId, true, defaultText);
+
+  try {
+    const resp = await fetch(route, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ clientes: clientesSelecionados }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      showMsg('download-msg', err.erro || 'Erro ao gerar arquivo.', 'error');
+      return;
+    }
+    const blob = await resp.blob();
+    triggerDownload(blob, filename);
+    showMsg('download-msg', 'Download iniciado!', 'success');
+  } catch(e) {
+    showMsg('download-msg', 'Erro de conexão: ' + e.message, 'error');
+  } finally {
+    setLoading(btnId, spinnerId, textId, false, defaultText);
+  }
 }
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.style.display = 'block';
-}
-function hideError() {
-  errorMsg.style.display = 'none';
-}
+
+document.getElementById('btn-laudos').addEventListener('click', () =>
+  downloadZip('/baixar-laudos-cliente','btn-laudos','spinner-laudos','btn-laudos-text',
+              '↓ Baixar ZIP — Laudos','Laudos_Clientes_Altcom365.zip'));
+
+document.getElementById('btn-internos').addEventListener('click', () =>
+  downloadZip('/baixar-relatorios-internos','btn-internos','spinner-internos','btn-internos-text',
+              '↓ Baixar ZIP — Internos','Relatorios_Internos_Altcom365.zip'));
+
+document.getElementById('btn-voltar2').addEventListener('click', () => showStep(2));
+
+// Init
+showStep(1);
 </script>
 </body>
 </html>
