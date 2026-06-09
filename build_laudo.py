@@ -551,37 +551,25 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             dat(ws, r, ci, v, z=z, ha=ha)
             ci += 1
 
-        # Colunas de alerta (13-16)
-        if classif_base == 'CRÍTICO':
-            # Dispositivo laudado para troca — sem procedimentos específicos
-            bg_t, fc_t = ALERT_COLORS['troca']
-            for col_ci in range(ci, ci + 4):
-                is_first = col_ci == ci
-                c = ws.cell(row=r, column=col_ci,
-                            value="Laudado para Troca" if is_first else "")
-                c.fill      = PatternFill("solid", fgColor=bg_t)
-                c.font      = Font(name='Arial', size=8, bold=is_first, color=fc_t)
-                c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                c.border    = brd()
-        else:
-            alert_vals = [
-                (str(row.get('_alerta_armazenamento', '')), 'armazenamento'),
-                (str(row.get('_alerta_windows', '')),       'windows'),
-                (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
-                (str(row.get('_alerta_milvus', '')),        'milvus'),
-            ]
-            for v, color_key in alert_vals:
-                bg, fc = ALERT_COLORS[color_key]
-                c = ws.cell(row=r, column=ci, value=v if v else "")
-                if v:
-                    c.fill = PatternFill("solid", fgColor=bg)
-                    c.font = Font(name='Arial', size=8, bold=True, color=fc)
-                else:
-                    c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
-                    c.font = Font(name='Arial', size=8, color="CCCCCC")
-                c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                c.border    = brd()
-                ci += 1
+        # Colunas de alerta (13-16) — todos os dispositivos, incluindo CRÍTICO
+        alert_vals = [
+            (str(row.get('_alerta_armazenamento', '')), 'armazenamento'),
+            (str(row.get('_alerta_windows', '')),       'windows'),
+            (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
+            (str(row.get('_alerta_milvus', '')),        'milvus'),
+        ]
+        for v, color_key in alert_vals:
+            bg, fc = ALERT_COLORS[color_key]
+            c = ws.cell(row=r, column=ci, value=v if v else "")
+            if v:
+                c.fill = PatternFill("solid", fgColor=bg)
+                c.font = Font(name='Arial', size=8, bold=True, color=fc)
+            else:
+                c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
+                c.font = Font(name='Arial', size=8, color="CCCCCC")
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border    = brd()
+            ci += 1
 
     # -- Larguras --------------------------------------------------------------
     widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 22, 18, 28, 26]
