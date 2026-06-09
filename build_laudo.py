@@ -26,7 +26,7 @@ from openpyxl.utils import get_column_letter
 NAVY, WHITE, ZEBRA, BORDER_C = "0D1B2A", "FFFFFF", "F5F7FA", "D0D5DD"
 CYAN = "00C8D4"
 
-# ── Mapeamento novo formato → colunas do engine ───────────────────────────────
+# -- Mapeamento novo formato → colunas do engine -------------------------------
 COL_MAP_NOVO = {
     'NOME DO DISPOSITIVO':         'Nome do dispositivo',
     'TIPO DO DISPOSITIVO':         'Tipo de dispositivo',
@@ -42,7 +42,7 @@ COL_MAP_NOVO = {
     'VERSÃO DO CLIENT':            'Versão do client',
 }
 
-# ── Frases que NÃO aparecem no laudo do cliente ───────────────────────────────
+# -- Frases que NÃO aparecem no laudo do cliente -------------------------------
 _DESC_REMOVE = [
     "Necessário fazer upgrade para Windows 11.",
     "Manutenção preventiva de armazenamento recomendada.",
@@ -61,9 +61,9 @@ ALERT_COLORS = {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # NORMALIZAÇÃO
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def is_new_format(df):
     """Retorna True se o df vem do Relatório Milvus Completo (colunas UPPERCASE)."""
@@ -81,7 +81,7 @@ def normalize_df(df):
 
     df = df.copy()
 
-    # ── Calcula Armazenamento utilizado % ─────────────────────────────────────
+    # -- Calcula Armazenamento utilizado % -------------------------------------
     if '_uso_pct' in df.columns:
         # Já computado por calcular_alertas → converte para string
         df['Armazenamento utilizado'] = df['_uso_pct'].apply(
@@ -107,10 +107,10 @@ def normalize_df(df):
             return "NaN%"
         df['Armazenamento utilizado'] = df.apply(_calc_uso, axis=1)
 
-    # ── Renomeia colunas ──────────────────────────────────────────────────────
+    # -- Renomeia colunas ------------------------------------------------------
     df = df.rename(columns=COL_MAP_NOVO)
 
-    # ── Limpa strings em colunas de texto opcionais ───────────────────────────
+    # -- Limpa strings em colunas de texto opcionais ---------------------------
     for col in ('Apelido', 'Usuário logado'):
         if col in df.columns:
             df[col] = (df[col].astype(str)
@@ -119,9 +119,9 @@ def normalize_df(df):
     return df
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # ESTILOS OPENPYXL
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def brd():
     s = Side(style='thin', color=BORDER_C)
@@ -155,9 +155,9 @@ def title_strip(ws, row, text, span, h=34):
     c.alignment = Alignment(horizontal='left', vertical='center', indent=1)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # HELPERS DE LIMPEZA (laudo do cliente)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def _clean_descritivo(desc):
     result = str(desc)
@@ -235,9 +235,9 @@ def _uso_display(row):
     return f"{uso:.1f}%" if uso is not None else "N/D"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # LAUDO DO CLIENTE (3 abas, limpo — 14 colunas)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def build_laudo_cliente(df, output_path, cliente_nome=None):
     """
@@ -260,7 +260,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 
     wb = Workbook()
 
-    # ── ABA 1: LAUDO ─────────────────────────────────────────────────────────
+    # -- ABA 1: LAUDO ---------------------------------------------------------
     ws = wb.active; ws.title = "Laudo"
     NCOLS = 14
 
@@ -329,7 +329,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
 
-    # ── ABA 2: RESUMO EXECUTIVO ───────────────────────────────────────────────
+    # -- ABA 2: RESUMO EXECUTIVO -----------------------------------------------
     ws2 = wb.create_sheet("Resumo Executivo")
     title_strip(ws2, 1, "RESUMO EXECUTIVO", 5)
     ws2.row_dimensions[2].height = 18
@@ -369,7 +369,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     for ci, w in enumerate([16, 8, 8, 16, 38], 1):
         ws2.column_dimensions[get_column_letter(ci)].width = w
 
-    # ── ABA 3: LEGENDA ────────────────────────────────────────────────────────
+    # -- ABA 3: LEGENDA --------------------------------------------------------
     ws3 = wb.create_sheet("Legenda")
     title_strip(ws3, 1, "LEGENDA — METODOLOGIA ALTCOM 365", 3)
     ws3.row_dimensions[2].height = 5
@@ -406,9 +406,9 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     wb.save(output_path)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # RELATÓRIO INTERNO ALTCOM (1 aba, 16 colunas)
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None):
     """
@@ -438,7 +438,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
     results  = df.apply(classify, axis=1)
     df_out   = pd.concat([df.reset_index(drop=True), results.reset_index(drop=True)], axis=1)
 
-    # ── Calcula alertas inline se não vieram pré-computados ──────────────────
+    # -- Calcula alertas inline se não vieram pré-computados ------------------
     if not HAS_ALERTAS:
         hoje_ts = hoje
         def _inline_alerts(row):
@@ -469,10 +469,10 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
         inline = df_out.apply(_inline_alerts, axis=1)
         df_out = pd.concat([df_out, inline], axis=1)
 
-    # ── Filtra apenas dispositivos com alerta ─────────────────────────────────
+    # -- Filtra apenas dispositivos com alerta ---------------------------------
     alert_df = df_out[df_out['_tem_alerta']].copy()
 
-    # ── Cabeçalho Excel ───────────────────────────────────────────────────────
+    # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
                'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Data Atualização', 'Versão Agente',
@@ -577,10 +577,20 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                 c.border    = brd()
                 ci += 1
 
-    # ── Larguras ──────────────────────────────────────────────────────────────
+    # -- Larguras --------------------------------------------------------------
     widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 22, 18, 28, 26]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
 
-    # ── Rodapé ──────────────────────────────────────────────────────�
+    # -- Rodape -----------------------------------------------------------------
+    last_r = (len(alert_df) + 5) if not alert_df.empty else 6
+    ws.merge_cells(f'A{last_r}:{get_column_letter(NCOLS)}{last_r}')
+    c = ws.cell(row=last_r, column=1,
+                value=f"Altcom Tecnologia  |  Relatorio gerado em {hoje_str}  |  Uso interno")
+    c.fill      = PatternFill("solid", fgColor="1F2937")
+    c.font      = Font(name='Arial', size=8, italic=True, color="AAAAAA")
+    c.alignment = Alignment(horizontal='center', vertical='center', indent=1)
+    ws.row_dimensions[last_r].height = 14
+
+    wb.save(output_path)
