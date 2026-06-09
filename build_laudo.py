@@ -193,15 +193,21 @@ def _motivos_upgrade(row):
 
 def _badge_cliente(row):
     """Badge para o laudo cliente.
-    '- Upgrade' por SO apenas → remove sufixo (decisão de TI, não do cliente).
-    '- Upgrade' por RAM/SSD   → mantém sufixo (impacto direto no uso do cliente).
-    '- Man. Prev.' e CRÍTICO   → mantidos sem alteração.
+    '- Upgrade' por SO apenas + uso <= 70% → classificação base (sem sufixo).
+    '- Upgrade' por SO apenas + uso > 70%  → classif + '- Man. Prev.' (uso alto é visível ao cliente).
+    '- Upgrade' por RAM/SSD (com ou sem SO) → mantém '- Upgrade'.
+    '- Man. Prev.' e CRÍTICO               → mantidos sem alteração.
     """
     badge        = str(row.get('Badge', ''))
     classif_base = str(row.get('Classificação', badge))
     if '- Upgrade' in badge:
-        if _motivos_upgrade(row) == ['so']:
-            return classif_base  # só SO: sufixo removido
+        motivos = _motivos_upgrade(row)
+        if motivos == ['so']:
+            # Win 10 é o único motivo — verifica uso de armazenamento
+            uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
+            if uso is not None and uso > 70:
+                return classif_base + ' - Man. Prev.'
+            return classif_base
     return badge
 
 def _parse_data_at(val):
@@ -586,11 +592,4 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
     # -- Rodape -----------------------------------------------------------------
     last_r = (len(alert_df) + 5) if not alert_df.empty else 6
     ws.merge_cells(f'A{last_r}:{get_column_letter(NCOLS)}{last_r}')
-    c = ws.cell(row=last_r, column=1,
-                value=f"Altcom Tecnologia  |  Relatorio gerado em {hoje_str}  |  Uso interno")
-    c.fill      = PatternFill("solid", fgColor="1F2937")
-    c.font      = Font(name='Arial', size=8, italic=True, color="AAAAAA")
-    c.alignment = Alignment(horizontal='center', vertical='center', indent=1)
-    ws.row_dimensions[last_r].height = 14
-
     wb.save(output_path)
