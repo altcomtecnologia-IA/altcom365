@@ -25,12 +25,14 @@ BADGE_COLORS = {
 # ══════════════════════════════════════════════════════════════════════════════
 TIER_TABLE = {
     # ── NOTEBOOK i3 ──────────────────────────────────────────────────────────
+    ('notebook','i3', 4): 0, ('notebook','i3', 5): 0, ('notebook','i3', 6): 0,  # gerações antigas
     ('notebook','i3', 7): 0, ('notebook','i3', 8): 0, ('notebook','i3', 9): 0,
     ('notebook','i3',10): 1,
     ('notebook','i3',11): 1,   # não listado → conservador = SATISFATÓRIO
     ('notebook','i3',12): 2, ('notebook','i3',13): 2,
 
     # ── NOTEBOOK i5 ──────────────────────────────────────────────────────────
+    ('notebook','i5', 4): 0, ('notebook','i5', 5): 0, ('notebook','i5', 6): 0,  # gerações antigas
     ('notebook','i5', 7): 0,
     ('notebook','i5', 8): 1, ('notebook','i5', 9): 1,
     ('notebook','i5',10): 2,
@@ -39,6 +41,7 @@ TIER_TABLE = {
     ('notebook','i5',13): 4,
 
     # ── NOTEBOOK i7 ──────────────────────────────────────────────────────────
+    ('notebook','i7', 4): 0, ('notebook','i7', 5): 0,  # gerações antigas
     ('notebook','i7', 6): 0,
     ('notebook','i7', 7): 1,
     ('notebook','i7', 8): 2,
@@ -48,6 +51,7 @@ TIER_TABLE = {
     ('notebook','i7',12): 4, ('notebook','i7',13): 4,
 
     # ── DESKTOP i3 ───────────────────────────────────────────────────────────
+    ('desktop','i3', 4): 0, ('desktop','i3', 5): 0, ('desktop','i3', 6): 0,  # gerações antigas
     ('desktop','i3', 7): 0,
     ('desktop','i3', 8): 1, ('desktop','i3', 9): 1,
     ('desktop','i3',10): 2, ('desktop','i3',11): 2,
@@ -55,6 +59,7 @@ TIER_TABLE = {
     ('desktop','i3',13): 4,
 
     # ── DESKTOP i5 ───────────────────────────────────────────────────────────
+    ('desktop','i5', 4): 0, ('desktop','i5', 5): 0,  # gerações antigas
     ('desktop','i5', 6): 0,
     ('desktop','i5', 7): 1, ('desktop','i5', 8): 1, ('desktop','i5', 9): 1,
     ('desktop','i5',10): 2,
@@ -62,6 +67,7 @@ TIER_TABLE = {
     ('desktop','i5',12): 4, ('desktop','i5',13): 4,
 
     # ── DESKTOP i7 ───────────────────────────────────────────────────────────
+    ('desktop','i7', 4): 0, ('desktop','i7', 5): 0,  # gerações antigas
     ('desktop','i7', 6): 0,
     ('desktop','i7', 7): 1,
     ('desktop','i7', 8): 2,
@@ -163,6 +169,19 @@ def classify(row) -> pd.Series:
     storage = parse_storage(row['Armazenamento total'])
     uso     = parse_uso(row['Armazenamento utilizado'])
     so      = str(row['Sistema operacional'])
+
+    # Guarda: dados essenciais ausentes → CRÍTICO com descritivo específico
+    _proc_vazio = proc.strip().lower() in ('', 'nan', 'não possui', 'nao possui', 'none')
+    if _proc_vazio or ram == 0 or storage == 0:
+        return pd.Series({
+            'Classificação':         'CRÍTICO',
+            'Badge':                 'CRÍTICO',
+            'Descritivo':            'Dados indisponíveis — máquina requer revisão técnica. '
+                                     'Possível agente Milvus corrompido ou hardware quebrado.',
+            'Durabilidade estimada': 'Troca',
+            'Sugestão':              'Verificar conectividade do agente Milvus e estado físico da máquina.',
+            'Preços':                '',
+        })
     tipo    = device_type(str(row.get('Tipo de dispositivo', 'notebook')))
     win_old = is_win_old(so)
     familia, gen, suffix = parse_cpu(proc)
