@@ -128,6 +128,11 @@ def upload_completo():
         df = df[df['EXCLUÍDO'].astype(str).str.upper() != 'SIM']
         df = df[~df['NOME FANTASIA DO CLIENTE'].astype(str).str.lower()
                   .str.contains('altcom', na=False)]
+        # Remove servidores (qualquer critério basta)
+        df = df[~df['PROCESSADOR'].astype(str).str.contains('Xeon', case=False, na=False)]
+        if 'SERVIDOR' in df.columns:
+            df = df[df['SERVIDOR'].astype(str).str.upper() != 'SIM']
+        df = df[df['TIPO DO DISPOSITIVO'].astype(str).str.lower() != 'servidor']
         df = df.reset_index(drop=True)
 
         total = len(df)
