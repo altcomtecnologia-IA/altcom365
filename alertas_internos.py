@@ -4,6 +4,12 @@ Altcom 365 v2 -- logica dos 4 alertas operacionais e versao de referencia do age
 
 DATA DE ATUALIZACAO e coluna opcional -- quando ausente, alertas de Sem Contato e
 Agente Milvus ficam em branco sem interromper o processamento.
+
+V11: Nova regra de versao de referencia (semver):
+  1. Filtrar máquinas com contato <= 7 dias
+  2. Ordenar versões distintas por semver (tupla de inteiros)
+  3. Referência = maior versão com >= 3 ocorrências
+  4. Fallback: moda (regra V10)
 """
 import pandas as pd
 
@@ -48,22 +54,38 @@ def _parse_data_at(val):
 
 
 def _ver_tuple(v):
-    """'110.0.0.4' -> (110, 0, 0, 4) para comparacao semantica."""
+    """
+    '110.0.0.4' -> (110, 0, 0, 4) para comparacao semantica correta.
+    NUNCA comparar versoes como string: '9.0.0.0' > '110.0.0.0' em string -- bug classico.
+    """
     try:
         return tuple(int(x) for x in str(v).strip().split('.'))
     except Exception:
         return (0,)
 
 
-# -- Versao de referencia do agente Milvus --
+# -- Versao de referencia do agente Milvus (V11: nova regra semver) -----------
 
 def calcular_versao_referencia(df):
     """
     Retorna (versao_ref, n_desatualizadas, pct_desatualizadas).
-    Usa a versao mais comum entre maquinas com contato nos ultimos 7 dias.
-    Se DATA DE ATUALIZACAO ausente, usa moda de todas as versoes como fallback.
-    Calculado sobre o parque inteiro pos-filtros (nao por cliente).
-    Requer ao menos VERSAO DO CLIENT; retorna (None, 0, 0.0) se ausente.
+
+    Nova regra V11 (semver):
+      1. Filtrar máquinas com contato <= 7 dias (pós-filtros do app)
+         Se nenhuma tiver data recente, usa todo o parque como base.
+      2. Coletar versões válidas e contar ocorrências.
+      3. Ordenar versões por SEMVER DESC (tupla de inteiros — evita bug de string).
+      4. Referência = maior versão com >= 3 ocorrências (piso protege contra beta/teste).
+      5. Fallback: se nenhuma versão atinge o piso, usa a moda (regra V10).
+
+    Casos de teste esperados:
+      - 111.0.0.0 em 200 máquinas recentes → ref = 111.0.0.0
+      - 112.0.0.0 em 1, 111.0.0.0 em 200  → ref = 111.0.0.0 (112 não atinge piso)
+      - 112.0.0.0 em 3, 111.0.0.0 em 200  → ref = 112.0.0.0
+      - 9.0.0.0 vs 110.0.0.1              → 110.0.0.1 maior (anti-bug string)
+
+    Calcula desatualizadas sobre o parque inteiro (não só recentes):
+      n_desatualizadas = máquinas com versão DIFERENTE da referência.
     """
     col_data   = 'DATA DE ATUALIZAÇÃO'
     col_versao = 'VERSÃO DO CLIENT'
@@ -75,34 +97,45 @@ def calcular_versao_referencia(df):
         return (
             subset[col_versao]
             .astype(str).str.strip()
-            .replace({'nan': None, 'Não possui': None, '': None})
+            .replace({'nan': None, 'Não possui': None, 'nao possui': None, '': None})
             .dropna()
         )
 
+    # --- Passo 1: base de máquinas recentes ─────────────────────────────────
     if col_data in df.columns:
-        # Filtro por contato recente (<= 7 dias)
         datas = df[col_data].apply(_parse_data_at)
         hoje  = pd.Timestamp.today()
         dias  = datas.apply(lambda dt: (hoje - dt).days if dt is not None else None)
         recentes_mask = dias.apply(lambda d: d is not None and d <= 7)
         recentes = df[recentes_mask]
         if len(recentes) == 0:
-            recentes = df  # sem recentes -> usa tudo
-        versoes = _versoes_validas(recentes)
+            recentes = df   # sem recentes -> usa tudo como fallback
+        versoes_base = _versoes_validas(recentes)
     else:
-        # Sem coluna de data -- usa todas as maquinas como base
-        versoes = _versoes_validas(df)
+        # Sem coluna de data -- usa todas as máquinas
+        versoes_base = _versoes_validas(df)
 
-    if len(versoes) == 0:
+    if len(versoes_base) == 0:
         return None, 0, 0.0
 
-    versao_ref = versoes.mode().iloc[0]
+    # --- Passo 2: contagem de ocorrências ───────────────────────────────────
+    contagem = versoes_base.value_counts()   # Series: versão -> count
 
-    # Conta maquinas com versao DIFERENTE da referencia (inclui mais novas e mais antigas)
+    # --- Passo 3: versões com piso >= 3, ordenadas por semver DESC ──────────
+    candidatas = contagem[contagem >= 3]
+
+    if len(candidatas) > 0:
+        # Ordenar por semver (maior primeiro)
+        versao_ref = max(candidatas.index, key=_ver_tuple)
+    else:
+        # Fallback V10: moda simples
+        versao_ref = contagem.index[0]   # já está ordenada por frequência DESC
+
+    # --- Passo 4: contar desatualizadas no parque inteiro ───────────────────
     todas = df[col_versao].astype(str).str.strip()
     n_desatualizadas = int(
         todas.apply(
-            lambda v: v not in ('', 'nan', 'Não possui') and v != versao_ref
+            lambda v: v not in ('', 'nan', 'Não possui', 'nao possui') and v != versao_ref
         ).sum()
     )
     pct = round(n_desatualizadas / len(df) * 100, 1) if len(df) > 0 else 0.0

@@ -2,10 +2,14 @@
 Altcom 365 v2 — Backend Flask
 Suporta upload do Relatório Milvus Completo (todos os clientes)
 e geração de laudos em ZIP.
+
+V11: PostgreSQL + SQLAlchemy + Flask-Migrate + APScheduler
 """
-import os, sys, io, uuid, pickle, zipfile, tempfile
+import os, sys, io, uuid, pickle, zipfile, tempfile, logging
 from datetime import datetime, timedelta
 from flask import Flask, request, send_file, jsonify, render_template, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
@@ -13,12 +17,26 @@ from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
                                 normalize_df, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
+from models import db, ClientesMap, DispositivosMap, LaudosSnapshots
 import pandas as pd
 import milvus_api
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key          = os.environ.get('SECRET_KEY', 'altcom365-v2-secret-key')
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
+
+# ── Banco de dados ─────────────────────────────────────────────────────────────
+_db_url = os.environ.get('DATABASE_URL', '')
+# Render entrega 'postgres://' mas SQLAlchemy 1.4+ exige 'postgresql://'
+if _db_url.startswith('postgres://'):
+    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI']    = _db_url or 'sqlite:///altcom365_dev.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db.init_app(app)
+migrate = Migrate(app, db)
 
 ALLOWED_EXT = {'.xlsx', '.xls'}
 SESS_DIR    = tempfile.gettempdir()
@@ -566,7 +584,7 @@ def sincronizar_milvus():
             'pct_desatualizadas': pct_desat,
             'tem_data_at':      tem_data_at,
             'timestamp':        datetime.now(),
-            'fonte':            'api',   # rastreabilidade: veio da API, não do Excel
+            'fonte':            'api',
         }
         sid = _save_session(sess_data)
         session['sess_id'] = sid
@@ -584,6 +602,206 @@ def sincronizar_milvus():
 
     except Exception as e:
         return jsonify({'erro': f'Erro ao processar dados da API: {str(e)}'}), 500
+
+
+# ── V11: Rotas de sincronização de mapeamento ─────────────────────────────────
+
+@app.route('/sync-status', methods=['GET'])
+def sync_status():
+    """
+    Retorna o status atual dos mapeamentos Milvus gravados no banco.
+    Exibido na interface como "IDs sincronizados há X horas · N dispositivos mapeados".
+    """
+    n_clientes     = ClientesMap.query.count()
+    n_dispositivos = DispositivosMap.query.count()
+
+    ultima_disp = (
+        db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
+    )
+    ultima_cli = (
+        db.session.query(db.func.max(ClientesMap.ultima_sync)).scalar()
+    )
+
+    def _horas(dt):
+        if not dt:
+            return None
+        diff = datetime.utcnow() - dt
+        return round(diff.total_seconds() / 3600, 1)
+
+    return jsonify({
+        'clientes':     {'total': n_clientes,     'ultima_sync_h': _horas(ultima_cli)},
+        'dispositivos': {'total': n_dispositivos, 'ultima_sync_h': _horas(ultima_disp)},
+    })
+
+
+@app.route('/sync-clientes', methods=['POST'])
+def sync_clientes():
+    """
+    Sincroniza a tabela clientes_map com GET /api/cliente/busca do Milvus.
+    1 chamada — retorna lista de clientes com cliente_id e token.
+    Necessário para criar chamados (usa cliente_id + token por cliente).
+    """
+    mtoken = os.environ.get('MILVUS_API_TOKEN')
+    if not mtoken:
+        return jsonify({'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
+
+    try:
+        import requests as req
+        resp = req.get(
+            'https://apiintegracao.milvus.com.br/api/cliente/busca',
+            headers={'Authorization': mtoken, 'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.exception('sync_clientes: erro na chamada Milvus')
+        return jsonify({'erro': f'Falha ao buscar clientes: {exc}'}), 500
+
+    lista = data if isinstance(data, list) else data.get('lista', data.get('data', []))
+    agora = datetime.utcnow()
+    atualizados = 0
+
+    for item in lista:
+        nome = (item.get('nome_fantasia') or item.get('razao_social') or '').strip()
+        if not nome:
+            continue
+        cid  = item.get('id') or item.get('cliente_id')
+        ctok = item.get('token') or item.get('api_token') or ''
+        entry = ClientesMap.query.filter_by(nome_fantasia=nome).first()
+        if entry:
+            entry.milvus_cliente_id = cid
+            entry.milvus_token      = ctok
+            entry.ultima_sync       = agora
+        else:
+            entry = ClientesMap(
+                nome_fantasia=nome,
+                milvus_cliente_id=cid,
+                milvus_token=ctok,
+                ultima_sync=agora,
+            )
+            db.session.add(entry)
+        atualizados += 1
+    db.session.commit()
+
+    logger.info('sync_clientes: %d clientes sincronizados', atualizados)
+    return jsonify({'ok': True, 'clientes_sincronizados': atualizados})
+
+
+# Dicionário em memória para rastrear jobs de sync_ids
+_sync_jobs: dict = {}
+
+
+@app.route('/sync-ids', methods=['POST'])
+def sync_ids():
+    """
+    Sincroniza a tabela dispositivos_map paginando POST /api/dispositivos/listagem.
+    Rate limit: 1 req/min — job roda em background thread.
+    Retorna job_id para acompanhar progresso via /sync-ids/status?job_id=X.
+    """
+    import threading
+
+    mtoken = os.environ.get('MILVUS_API_TOKEN')
+    if not mtoken:
+        return jsonify({'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
+
+    job_id = str(uuid.uuid4())[:8]
+    _sync_jobs[job_id] = {'status': 'running', 'pagina': 0, 'total': 0, 'mapeados': 0}
+
+    def _run(jid, tok):
+        import requests as req
+        import time as _t
+        with app.app_context():
+            try:
+                pagina   = 1
+                mapeados = 0
+                agora    = datetime.utcnow()
+
+                while True:
+                    _sync_jobs[jid]['pagina'] = pagina
+                    try:
+                        resp = req.post(
+                            'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
+                            json={'is_paginate': True, 'total_registros': 50, 'pagina': pagina},
+                            headers={'Authorization': tok, 'Content-Type': 'application/json'},
+                            timeout=30,
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
+                    except Exception as e:
+                        _sync_jobs[jid]['status'] = f'erro_pg{pagina}: {e}'
+                        return
+
+                    meta    = data.get('meta', {}).get('paginate', {})
+                    last_pg = int(meta.get('last_page', 1))
+                    total   = int(meta.get('total', 0))
+                    lista   = data.get('lista', [])
+                    _sync_jobs[jid]['total'] = total
+
+                    for item in lista:
+                        host = (item.get('hostname') or '').strip()
+                        nome = (item.get('nome_fantasia') or '').strip()
+                        if not host or not nome:
+                            continue
+                        did   = item.get('id') or item.get('dispositivo_id')
+                        ativo = item.get('is_ativo', True)
+                        entry = DispositivosMap.query.filter_by(
+                            hostname=host, nome_fantasia=nome
+                        ).first()
+                        if entry:
+                            entry.milvus_dispositivo_id = did
+                            entry.is_ativo    = ativo
+                            entry.ultima_sync = agora
+                        else:
+                            db.session.add(DispositivosMap(
+                                hostname=host, nome_fantasia=nome,
+                                milvus_dispositivo_id=did,
+                                is_ativo=ativo, ultima_sync=agora,
+                            ))
+                        mapeados += 1
+
+                    db.session.commit()
+                    _sync_jobs[jid]['mapeados'] = mapeados
+
+                    if pagina >= last_pg:
+                        break
+                    pagina += 1
+                    _t.sleep(61)   # rate limit 1 req/min
+
+                _sync_jobs[jid]['status'] = 'done'
+                logger.info('sync_ids: %d dispositivos mapeados', mapeados)
+
+            except Exception as e:
+                _sync_jobs[jid]['status'] = f'erro: {e}'
+                logger.exception('sync_ids: erro inesperado')
+
+    threading.Thread(target=_run, args=(job_id, mtoken), daemon=True).start()
+    return jsonify({'ok': True, 'job_id': job_id, 'msg': 'Sincronizacao iniciada em background.'})
+
+
+@app.route('/sync-ids/status', methods=['GET'])
+def sync_ids_status():
+    """Retorna o progresso do job de sync_ids (ou status geral do banco)."""
+    job_id = request.args.get('job_id')
+    if job_id and job_id in _sync_jobs:
+        return jsonify(_sync_jobs[job_id])
+    n = DispositivosMap.query.count()
+    ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
+    return jsonify({
+        'total_mapeados': n,
+        'ultima_sync': ultima.isoformat() if ultima else None,
+    })
+
+
+if __name__ == '__main__':
+    app.run(debug=False, host='0.0.0.0', port=5000)
+d job_id in _sync_jobs:
+        return jsonify(_sync_jobs[job_id])
+    # Retorna o status geral do banco
+    with app.app_context():
+        n = DispositivosMap.query.count()
+        ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
+    return jsonify({'total_mapeados': n, 'ultima_sync': ultima.isoformat() if ultima else None})
 
 
 if __name__ == '__main__':
