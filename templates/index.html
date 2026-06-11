@@ -65,8 +65,27 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 .btn-green:hover{background:#155932}
 .btn-blue{background:#0F4C75;color:#fff}
 .btn-blue:hover{background:#0C3D60}
+.btn-milvus{background:linear-gradient(135deg,#0077B6,#0096C7);color:#fff;
+            border:1px solid rgba(0,200,212,.3)}
+.btn-milvus:hover:not(:disabled){background:linear-gradient(135deg,#005F8A,#007BA3)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+
+/* ── Divisor "ou" ── */
+.ou-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--gray4);font-size:12px}
+.ou-divider::before,.ou-divider::after{content:'';flex:1;height:1px;background:var(--navy3)}
+
+/* ── Bloco Milvus sync ── */
+.milvus-sync-block{background:var(--navy3);border-radius:var(--radius);
+                   padding:18px 20px;border:1px solid rgba(0,200,212,.15)}
+.milvus-sync-block .ms-title{font-size:13px;font-weight:600;color:var(--white);margin-bottom:4px}
+.milvus-sync-block .ms-desc{font-size:11px;color:var(--gray4);margin-bottom:14px;line-height:1.5}
+.milvus-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;
+              padding:2px 8px;border-radius:20px;margin-left:8px;
+              background:rgba(0,200,212,.12);color:var(--cyan);border:1px solid rgba(0,200,212,.3)}
+.milvus-na-msg{font-size:11px;color:var(--gray4);padding:10px 0;font-style:italic}
+.fonte-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:8px;
+             background:rgba(0,150,199,.2);color:#0096C7;border:1px solid rgba(0,150,199,.3)}
 
 /* ── Loading spinner ── */
 .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.2);
@@ -184,7 +203,28 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
   <!-- ── ETAPA 1: Upload ─────────────────────────────────────────────────── -->
   <div id="section-upload">
     <div class="card">
-      <div class="section-title">Relatório Milvus Completo</div>
+      <div class="section-title">Fonte de Dados</div>
+
+      <!-- Opção A: Sincronizar via API -->
+      <div class="milvus-sync-block" id="milvus-sync-block">
+        <div class="ms-title">
+          🔄 Sincronizar com Milvus
+          <span class="milvus-badge" id="milvus-recomendado">Recomendado</span>
+        </div>
+        <div class="ms-desc">Busca os dados diretamente da API Milvus — sem precisar exportar o Excel manualmente.</div>
+        <div id="milvus-na-msg" class="milvus-na-msg hidden">
+          ⚠️ Credencial não configurada — configure <code>MILVUS_API_TOKEN</code> no painel do Render para habilitar.
+        </div>
+        <button class="btn btn-milvus" id="btn-sincronizar" disabled>
+          <span class="spinner" id="spinner-sincronizar"></span>
+          <span id="btn-sincronizar-text">🔄 Sincronizar agora</span>
+        </button>
+      </div>
+
+      <!-- Divisor -->
+      <div class="ou-divider">ou faça o upload manual</div>
+
+      <!-- Opção B: Upload do Excel -->
       <div class="upload-zone" id="upload-zone">
         <input type="file" id="file-input" accept=".xlsx,.xls">
         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none"
@@ -212,6 +252,7 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
       <div class="section-title">
         Selecionar Clientes
         <span class="total-badge" id="total-disp-badge" style="margin-left:8px"></span>
+        <span class="fonte-badge hidden" id="fonte-badge">via API</span>
       </div>
       <div class="sel-controls">
         <a onclick="toggleAll(true)">Selecionar todos</a>
@@ -284,9 +325,29 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 
 <script>
 // ── Estado global ─────────────────────────────────────────────────────────────
-let clientesDisponiveis = [];
-let contagemClientes    = {};
+let clientesDisponiveis  = [];
+let contagemClientes     = {};
 let clientesSelecionados = [];
+let fonteDados           = 'upload'; // 'upload' | 'api'
+
+// ── Verificação do token Milvus ao carregar ───────────────────────────────────
+async function verificarTokenMilvus() {
+  try {
+    const resp = await fetch('/milvus-status');
+    const data = await resp.json();
+    const btn  = document.getElementById('btn-sincronizar');
+    const naMsg = document.getElementById('milvus-na-msg');
+    if (data.configurado) {
+      btn.disabled = false;
+    } else {
+      btn.disabled = true;
+      naMsg.classList.remove('hidden');
+      document.getElementById('milvus-recomendado').style.display = 'none';
+    }
+  } catch(e) {
+    // silencioso — fallback para upload manual
+  }
+}
 
 // ── Navegação entre etapas ────────────────────────────────────────────────────
 function showStep(n) {
@@ -347,7 +408,45 @@ function triggerDownload(blob, filename) {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }
 
-// ── ETAPA 1: Upload ───────────────────────────────────────────────────────────
+// ── Handler compartilhado após upload/sync bem-sucedido ───────────────────────
+function handleDadosCarregados(data, fonte) {
+  fonteDados = fonte;
+  clientesDisponiveis = data.clientes;
+  contagemClientes    = data.contagem;
+  renderClientGrid();
+  const badgeTotal = document.getElementById('total-disp-badge');
+  badgeTotal.textContent = data.total_dispositivos + ' dispositivos · ' + data.clientes.length + ' clientes';
+  const fonteBadge = document.getElementById('fonte-badge');
+  if (fonte === 'api') {
+    fonteBadge.textContent = '🔄 via API Milvus';
+    fonteBadge.classList.remove('hidden');
+  } else {
+    fonteBadge.classList.add('hidden');
+  }
+  showStep(2);
+}
+
+// ── ETAPA 1A: Sincronizar via API ─────────────────────────────────────────────
+document.getElementById('btn-sincronizar').addEventListener('click', async () => {
+  hideMsg('upload-msg');
+  setLoading('btn-sincronizar','spinner-sincronizar','btn-sincronizar-text', true, '🔄 Sincronizar agora');
+
+  try {
+    const resp = await fetch('/sincronizar-milvus', { method: 'POST' });
+    const data = await resp.json();
+    if (data.erro) {
+      showMsg('upload-msg', data.erro, 'error');
+    } else {
+      handleDadosCarregados(data, 'api');
+    }
+  } catch(e) {
+    showMsg('upload-msg', 'Erro de conexão: ' + e.message, 'error');
+  } finally {
+    setLoading('btn-sincronizar','spinner-sincronizar','btn-sincronizar-text', false, '🔄 Sincronizar agora');
+  }
+});
+
+// ── ETAPA 1B: Upload do Excel ─────────────────────────────────────────────────
 document.getElementById('btn-upload').addEventListener('click', async () => {
   if (!fileInput.files[0]) {
     showMsg('upload-msg', 'Selecione um arquivo .xlsx primeiro.', 'error');
@@ -365,12 +464,7 @@ document.getElementById('btn-upload').addEventListener('click', async () => {
     if (data.erro) {
       showMsg('upload-msg', data.erro, 'error');
     } else {
-      clientesDisponiveis = data.clientes;
-      contagemClientes    = data.contagem;
-      renderClientGrid();
-      document.getElementById('total-disp-badge').textContent =
-        data.total_dispositivos + ' dispositivos · ' + data.clientes.length + ' clientes';
-      showStep(2);
+      handleDadosCarregados(data, 'upload');
     }
   } catch(e) {
     showMsg('upload-msg', 'Erro de conexão: ' + e.message, 'error');
@@ -566,6 +660,7 @@ document.getElementById('btn-voltar2').addEventListener('click', () => showStep(
 
 // Init
 showStep(1);
+verificarTokenMilvus();
 </script>
 </body>
 </html>
