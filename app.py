@@ -14,6 +14,7 @@ from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
 import pandas as pd
+import milvus_api
 
 app = Flask(__name__)
 app.secret_key          = os.environ.get('SECRET_KEY', 'altcom365-v2-secret-key')
@@ -497,6 +498,92 @@ def preview():
     finally:
         try: os.unlink(path)
         except: pass
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROTAS V10 — Integração com API Milvus
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/milvus-status', methods=['GET'])
+def milvus_status():
+    """Informa se o token da API Milvus está configurado."""
+    return jsonify({'configurado': milvus_api.token_configurado()})
+
+
+@app.route('/sincronizar-milvus', methods=['POST'])
+def sincronizar_milvus():
+    """
+    Busca os dispositivos diretamente da API Milvus.
+    Aplica os mesmos filtros de /upload-completo e retorna a mesma estrutura JSON.
+    """
+    _clear_old_sessions()
+
+    df, erro = milvus_api.listar_dispositivos()
+    if erro:
+        return jsonify({'erro': erro}), 400
+
+    try:
+        # Detecta formato (a API já entrega no formato certo)
+        if not is_new_format(df):
+            return jsonify({
+                'erro': 'A API Milvus retornou dados em formato inesperado. '
+                        'Verifique o mapeamento de campos em milvus_api.py.'
+            }), 400
+
+        # Valida colunas obrigatórias
+        faltando = [c for c in COLUNAS_OBRIGATORIAS if c not in df.columns]
+        if faltando:
+            return jsonify({'erro': f'Colunas ausentes na resposta da API: {", ".join(faltando)}'}), 400
+
+        # Mesmos filtros automáticos de /upload-completo
+        df = df[df['EXCLUÍDO'].astype(str).str.upper() != 'SIM']
+        df = df[~df['NOME FANTASIA DO CLIENTE'].astype(str).str.lower()
+                  .str.contains('altcom', na=False)]
+        # Remove servidores
+        df = df[~df['PROCESSADOR'].astype(str).str.contains('Xeon', case=False, na=False)]
+        if 'SERVIDOR' in df.columns:
+            df = df[df['SERVIDOR'].astype(str).str.upper() != 'SIM']
+        df = df[df['TIPO DO DISPOSITIVO'].astype(str).str.lower() != 'servidor']
+        df = df.reset_index(drop=True)
+
+        total = len(df)
+        if total == 0:
+            return jsonify({'erro': 'Nenhum dispositivo ativo encontrado após filtros.'}), 400
+
+        # Calcula versão de referência do agente
+        versao_ref, n_desat, pct_desat = calcular_versao_referencia(df)
+        tem_data_at = 'DATA DE ATUALIZAÇÃO' in df.columns
+
+        # Lista de clientes
+        clientes = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
+        contagem = df['NOME FANTASIA DO CLIENTE'].value_counts().to_dict()
+
+        # Salva sessão (reutiliza o mesmo mecanismo do upload)
+        sess_data = {
+            'df':               df,
+            'versao_ref':       versao_ref,
+            'n_desatualizadas': n_desat,
+            'pct_desatualizadas': pct_desat,
+            'tem_data_at':      tem_data_at,
+            'timestamp':        datetime.now(),
+            'fonte':            'api',   # rastreabilidade: veio da API, não do Excel
+        }
+        sid = _save_session(sess_data)
+        session['sess_id'] = sid
+
+        return jsonify({
+            'clientes':           clientes,
+            'contagem':           contagem,
+            'total_dispositivos': total,
+            'tem_data_at':        tem_data_at,
+            'versao_ref':         versao_ref,
+            'n_desatualizadas':   n_desat,
+            'pct_desatualizadas': pct_desat,
+            'fonte':              'api',
+        })
+
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao processar dados da API: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
