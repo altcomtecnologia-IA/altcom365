@@ -795,14 +795,3 @@ def sync_ids_status():
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
-d job_id in _sync_jobs:
-        return jsonify(_sync_jobs[job_id])
-    # Retorna o status geral do banco
-    with app.app_context():
-        n = DispositivosMap.query.count()
-        ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
-    return jsonify({'total_mapeados': n, 'ultima_sync': ultima.isoformat() if ultima else None})
-
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
