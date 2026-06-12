@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Altcom 365 — Visualização do Parque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0D1B2A;--navy2:#132336;--navy3:#1A2D42;--navy4:#223550;
+  --cyan:#00C8D4;--cyan2:#00A8B4;
+  --white:#FFFFFF;--gray1:#F5F7FA;--gray2:#E8EDF2;--gray3:#C8D0DA;--gray4:#8899AA;
+  --green:#00B050;--yellow:#FFC000;--red:#C00000;--blue:#00B0F0;--orange:#92D050;
+  --radius:10px;--shadow:0 4px 20px rgba(0,0,0,.35);
+
+  /* Classification colors */
+  --cl-excelente-bg:#1A6E3C; --cl-excelente-fg:#ffffff;
+  --cl-otimo-bg:#00703C;     --cl-otimo-fg:#ffffff;
+  --cl-bom-bg:#0F5C2E;       --cl-bom-fg:#92D050;
+  --cl-satisfatorio-bg:#7B4F00; --cl-satisfatorio-fg:#FFC000;
+  --cl-critico-bg:#6B0000;   --cl-critico-fg:#FF6B6B;
+}
+
+html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family:'Inter',sans-serif;font-size:14px}
+
+/* ── Layout ── */
+.app{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+
+/* ── Header ── */
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.logo-bar{display:flex;align-items:center;gap:12px}
+.brand-name{font-size:20px;font-weight:700;color:var(--cyan);letter-spacing:-.3px}
+.brand-sub{font-size:11px;color:var(--gray4)}
+.btn-back{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;
+          border-radius:8px;background:var(--navy3);color:var(--white);
+          border:1px solid var(--navy4);cursor:pointer;font-size:12px;font-weight:500;
+          text-decoration:none;transition:background .15s}
+.btn-back:hover{background:var(--navy4)}
+.header-meta{font-size:12px;color:var(--gray4);display:flex;align-items:center;gap:16px}
+.versao-ref{background:var(--navy3);border:1px solid var(--cyan2);border-radius:6px;
+            padding:4px 10px;color:var(--cyan);font-weight:600;font-size:11px}
+
+/* ── Loading ── */
+#loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;
+                min-height:300px;gap:16px}
+.spinner{width:36px;height:36px;border:3px solid var(--navy3);border-top-color:var(--cyan);
+         border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-screen p{color:var(--gray4);font-size:13px}
+
+/* ── Client Tabs ── */
+.tabs-wrapper{background:var(--navy2);border-radius:var(--radius);border:1px solid var(--navy3);
+              margin-bottom:20px;overflow:hidden}
+.tabs-bar{display:flex;overflow-x:auto;border-bottom:1px solid var(--navy3);
+          scrollbar-width:thin;scrollbar-color:var(--navy4) transparent}
+.tabs-bar::-webkit-scrollbar{height:4px}
+.tabs-bar::-webkit-scrollbar-thumb{background:var(--navy4);border-radius:2px}
+.tab-btn{flex-shrink:0;padding:12px 18px;font-size:13px;font-weight:500;
+         color:var(--gray4);background:none;border:none;cursor:pointer;
+         border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{color:var(--white);background:rgba(255,255,255,.03)}
+.tab-btn.active{color:var(--cyan);border-bottom-color:var(--cyan);background:rgba(0,200,212,.05)}
+.tab-count{display:inline-flex;align-items:center;justify-content:center;
+           width:20px;height:20px;border-radius:50%;background:var(--navy4);
+           font-size:10px;font-weight:700;margin-left:6px;color:var(--gray3)}
+
+/* ── Tab Content ── */
+.tab-content{display:none;padding:20px}
+.tab-content.active{display:block}
+
+/* ── Vista Toggle ── */
+.vista-row{display:flex;align-items:center;justify-content:space-between;
+           margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.vista-toggle{display:flex;gap:0;background:var(--navy3);border-radius:8px;
+              padding:3px;border:1px solid var(--navy4)}
+.vista-btn{padding:7px 18px;border-radius:6px;border:none;cursor:pointer;
+           font-size:12px;font-weight:600;color:var(--gray4);background:none;transition:all .15s}
+.vista-btn.active{background:var(--cyan);color:var(--navy)}
+.download-row{display:flex;gap:10px;flex-wrap:wrap}
+.btn-dl{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;
+        border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;
+        font-family:'Inter',sans-serif;transition:all .15s}
+.btn-dl-laudo{background:#1A5276;color:#AED6F1}
+.btn-dl-laudo:hover{background:#154360}
+.btn-dl-interno{background:#1A4A2E;color:#A9DFBF}
+.btn-dl-interno:hover{background:#145A32}
+.btn-dl:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Vista Resumo ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+.kpi-card{background:var(--navy3);border-radius:var(--radius);padding:16px 14px;
+          border:1px solid var(--navy4);text-align:center}
+.kpi-val{font-size:28px;font-weight:700;color:var(--white);line-height:1}
+.kpi-label{font-size:11px;color:var(--gray4);margin-top:4px;font-weight:500}
+.kpi-card.kpi-total .kpi-val{color:var(--cyan)}
+
+.classif-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.classif-row{display:flex;align-items:center;gap:10px}
+.classif-badge{width:110px;flex-shrink:0;text-align:center;padding:5px 10px;
+               border-radius:6px;font-size:11px;font-weight:700}
+.classif-bar-wrap{flex:1;background:var(--navy3);border-radius:4px;height:12px;overflow:hidden}
+.classif-bar{height:100%;border-radius:4px;transition:width .6s ease}
+.classif-pct{width:40px;text-align:right;font-size:12px;color:var(--gray3);font-weight:600}
+.classif-qtd{width:35px;text-align:right;font-size:12px;color:var(--gray4)}
+
+.alertas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.alerta-card{background:var(--navy3);border-radius:8px;padding:12px 14px;
+             border:1px solid var(--navy4);display:flex;align-items:center;gap:10px}
+.alerta-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
+             justify-content:center;font-size:16px;flex-shrink:0}
+.alerta-card .alerta-val{font-size:20px;font-weight:700;color:var(--white);line-height:1}
+.alerta-card .alerta-lbl{font-size:11px;color:var(--gray4);margin-top:2px}
+
+/* Milvus info bar */
+.milvus-bar{background:var(--navy3);border-radius:8px;padding:10px 14px;
+            border:1px solid rgba(0,200,212,.2);display:flex;align-items:center;
+            gap:10px;font-size:12px;color:var(--gray3);margin-bottom:20px;flex-wrap:wrap}
+.milvus-bar strong{color:var(--cyan)}
+
+/* ── Vista Detalhe ── */
+.search-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.search-input{flex:1;min-width:180px;padding:9px 14px;border-radius:8px;
+              background:var(--navy3);border:1px solid var(--navy4);
+              color:var(--white);font-family:'Inter',sans-serif;font-size:13px;outline:none}
+.search-input::placeholder{color:var(--gray4)}
+.search-input:focus{border-color:var(--cyan)}
+.filter-select{padding:9px 12px;border-radius:8px;background:var(--navy3);
+               border:1px solid var(--navy4);color:var(--white);font-size:12px;
+               font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.filter-select:focus{border-color:var(--cyan)}
+.filter-select option{background:var(--navy2)}
+
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--navy3)}
+table.dev-table{width:100%;border-collapse:collapse;font-size:12px}
+table.dev-table thead tr{background:var(--navy3)}
+table.dev-table thead th{padding:10px 14px;text-align:left;font-weight:600;
+                          color:var(--gray3);font-size:11px;text-transform:uppercase;
+                          letter-spacing:.4px;white-space:nowrap;border-bottom:1px solid var(--navy4)}
+table.dev-table tbody tr{border-bottom:1px solid rgba(26,45,66,.6);transition:background .1s}
+table.dev-table tbody tr:hover{background:rgba(0,200,212,.04)}
+table.dev-table tbody tr:last-child{border-bottom:none}
+table.dev-table td{padding:10px 14px;vertical-align:middle;color:var(--gray2)}
+td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:500}
+
+.badge-cl{display:inline-block;padding:3px 9px;border-radius:5px;font-size:10px;
+          font-weight:700;letter-spacing:.3px}
+.badge-EXCELENTE{background:#1A6E3C;color:#fff}
+.badge-ÓTIMO    {background:#00703C;color:#92D050}
+.badge-BOM      {background:#1C5D3A;color:#92D050}
+.badge-SATISFATÓRIO{background:#7B4F00;color:#FFC000}
+.badge-CRÍTICO  {background:#6B0000;color:#FF6B6B}
+.badge-default  {background:#2a3a4a;color:#aaa}
+
+.alert-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;
+             border-radius:4px;font-size:10px;font-weight:600;margin:2px 2px 2px 0;
+             white-space:nowrap}
+.alert-armazenamento{background:#5D3A00;color:#FFC000}
+.alert-windows      {background:#003D5C;color:#00B0F0}
+.alert-sem_contato  {background:#3D0000;color:#FF6B6B}
+.alert-milvus       {background:#0D2E4A;color:#56CCF2}
+
+.no-results{text-align:center;padding:32px;color:var(--gray4);font-size:13px}
+
+/* ── History Section ── */
+.history-section{margin-top:28px}
+.history-title{font-size:13px;font-weight:600;color:var(--gray3);margin-bottom:12px;
+               display:flex;align-items:center;gap:8px}
+.history-title::after{content:'';flex:1;height:1px;background:var(--navy3)}
+.history-list{display:flex;flex-direction:column;gap:8px}
+.history-item{background:var(--navy3);border:1px solid var(--navy4);border-radius:8px;
+              padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.history-date{font-size:12px;color:var(--cyan);font-weight:600;white-space:nowrap;min-width:130px}
+.history-stats{display:flex;gap:10px;flex-wrap:wrap;flex:1}
+.hstat{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600}
+.hstat-total{background:var(--navy4);color:var(--gray2)}
+.hstat-critico{background:#6B0000;color:#FF6B6B}
+.hstat-bom{background:#1A6E3C;color:#A9DFBF}
+.history-empty{color:var(--gray4);font-size:12px;padding:8px 0}
+
+/* ── Responsive ── */
+@media(max-width:600px){
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .alertas-grid{grid-template-columns:1fr 1fr}
+  table.dev-table{font-size:11px}
+  .tab-btn{padding:10px 12px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-bar">
+      <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
+        <rect width="40" height="40" rx="8" fill="#00C8D4" fill-opacity=".15"/>
+        <path d="M10 28L20 12L30 28H10Z" fill="none" stroke="#00C8D4" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M15 28L20 20L25 28" fill="#00C8D4" fill-opacity=".6"/>
+      </svg>
+      <div>
+        <div class="brand-name">Altcom 365</div>
+        <div class="brand-sub">Análise de Parque</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="header-meta" id="header-meta" style="display:none">
+        <span id="total-geral-label"></span>
+        <span class="versao-ref" id="versao-ref-label" style="display:none"></span>
+      </div>
+      <a href="/" class="btn-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Novo upload
+      </a>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading-screen">
+    <div class="spinner"></div>
+    <p>Processando parque de máquinas…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-screen" style="display:none;text-align:center;padding:48px">
+    <p style="color:#FF6B6B;font-size:14px" id="error-msg"></p>
+    <a href="/" class="btn-back" style="margin-top:16px;display:inline-flex">← Voltar ao upload</a>
+  </div>
+
+  <!-- Main content -->
+  <div id="main-content" style="display:none">
+    <!-- Tabs bar -->
+    <div class="tabs-wrapper">
+      <div class="tabs-bar" id="tabs-bar"></div>
+
+      <!-- Tab contents (injected by JS) -->
+      <div id="tabs-body"></div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+// ── Utility ──────────────────────────────────────────────────────────────────
+
+function escHtml(s){
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function classifBadge(c){
+  const map={
+    'EXCELENTE':'badge-EXCELENTE','ÓTIMO':'badge-ÓTIMO','BOM':'badge-BOM',
+    'SATISFATÓRIO':'badge-SATISFATÓRIO','CRÍTICO':'badge-CRÍTICO',
+  };
+  const cls = map[c] || 'badge-default';
+  return `<span class="badge-cl ${cls}">${escHtml(c||'—')}</span>`;
+}
+
+function alertBadges(alertas){
+  if(!alertas||!alertas.length) return '<span style="color:var(--gray4);font-size:11px">—</span>';
+  return alertas.map(a=>{
+    const icons={'armazenamento':'💾','windows':'🪟','sem_contato':'📡','milvus':'🔄'};
+    const icon = icons[a.tipo]||'⚠';
+    return `<span class="alert-badge alert-${escHtml(a.tipo)}" title="${escHtml(a.msg)}">${icon} ${escHtml(a.tipo==='armazenamento'?'Armaz.':a.tipo==='sem_contato'?'Sem contato':a.tipo==='windows'?'Windows':'Milvus')}</span>`;
+  }).join('');
+}
+
+// ── Classification bar colors (match CSS) ──
+const CL_COLORS = {
+  'EXCELENTE':'#1A6E3C','ÓTIMO':'#00703C','BOM':'#1C5D3A',
+  'SATISFATÓRIO':'#7B4F00','CRÍTICO':'#6B0000',
+};
+const CL_FG = {
+  'EXCELENTE':'#fff','ÓTIMO':'#92D050','BOM':'#92D050',
+  'SATISFATÓRIO':'#FFC000','CRÍTICO':'#FF6B6B',
+};
+
+// ── Render a single tab content ───────────────────────────────────────────────
+function renderTab(cli, idx){
+  const {nome, resumo, dispositivos} = cli;
+  const safeId = 'tab_' + idx;
+  const total  = resumo.total || 0;
+  const rs     = resumo.resumo || [];
+  const al     = resumo.alertas || {};
+  const mi     = resumo.milvus_info || {};
+
+  // KPI row — first build counts from rs
+  const byLabel = {};
+  rs.forEach(r=>byLabel[r.label]=r.qtd);
+
+  const kpiHtml = `
+    <div class="kpi-row">
+      <div class="kpi-card kpi-total">
+        <div class="kpi-val">${total}</div>
+        <div class="kpi-label">Dispositivos</div>
+      </div>
+      ${rs.map(r=>`
+      <div class="kpi-card">
+        <div class="kpi-val" style="color:${CL_FG[r.label]||'#fff'}">${r.qtd}</div>
+        <div class="kpi-label">${r.label}</div>
+      </div>`).join('')}
+    </div>`;
+
+  // Classification bars
+  const barsHtml = `<div class="classif-grid">
+    ${rs.map(r=>`
+    <div class="classif-row">
+      <span class="classif-badge" style="background:${CL_COLORS[r.label]||'#2a3a4a'};color:${CL_FG[r.label]||'#aaa'}">${r.label}</span>
+      <div class="classif-bar-wrap">
+        <div class="classif-bar" style="width:${r.pct}%;background:${CL_COLORS[r.label]||'#2a3a4a'}"></div>
+      </div>
+      <span class="classif-pct">${r.pct}%</span>
+      <span class="classif-qtd">(${r.qtd})</span>
+    </div>`).join('')}
+  </div>`;
+
+  // Alertas
+  const alertItems = [
+    {key:'armazenamento', icon:'💾', label:'Armazenamento',   color:'#5D3A00', fg:'#FFC000'},
+    {key:'windows',       icon:'🪟', label:'Windows antigo',  color:'#003D5C', fg:'#00B0F0'},
+    {key:'sem_contato',   icon:'📡', label:'Sem contato',     color:'#3D0000', fg:'#FF6B6B'},
+    {key:'milvus',        icon:'🔄', label:'Milvus desatual.', color:'#0D2E4A', fg:'#56CCF2'},
+  ].filter(a=>al[a.key]>0);
+
+  const alertasHtml = alertItems.length ? `
+    <div class="alertas-grid">
+      ${alertItems.map(a=>`
+      <div class="alerta-card">
+        <div class="alerta-icon" style="background:${a.color};color:${a.fg}">${a.icon}</div>
+        <div>
+          <div class="alerta-val">${al[a.key]}</div>
+          <div class="alerta-lbl">${a.label}</div>
+        </div>
+      </div>`).join('')}
+    </div>` : `<p style="color:var(--gray4);font-size:12px;padding:8px 0">✅ Nenhum alerta adicional</p>`;
+
+  // Milvus bar
+  const milvusHtml = mi.versao_ref ? `
+    <div class="milvus-bar">
+      🔧 Agente Milvus de referência: <strong>${escHtml(mi.versao_ref)}</strong>
+      &nbsp;·&nbsp;
+      ${mi.n_desatualizadas} desatualizado(s) (${mi.pct}%)
+      &nbsp;·&nbsp;
+      <span style="color:${mi.badge==='yellow'?'#FFC000':'#56CCF2'}">${escHtml(mi.label||'')}</span>
+    </div>` : '';
+
+  // Vista Detalhe — table rows
+  const rowsHtml = dispositivos.map(d=>`
+    <tr>
+      <td class="hostname">${escHtml(d.hostname)}</td>
+      <td>${classifBadge(d.classificacao)}</td>
+      <td style="font-family:monospace;font-size:11px">${escHtml(d.versao)}</td>
+      <td>${escHtml(d.so)}</td>
+      <td style="white-space:nowrap">${escHtml(d.ultimo_contato)}</td>
+      <td>${alertBadges(d.alertas)}</td>
+    </tr>`).join('');
+
+  // Full tab HTML
+  return `
+  <div id="${safeId}" class="tab-content">
+
+    <!-- Vista toggle + Downloads -->
+    <div class="vista-row">
+      <div class="vista-toggle">
+        <button class="vista-btn active" onclick="switchVista('${safeId}','resumo',this)">📊 Resumo</button>
+        <button class="vista-btn"        onclick="switchVista('${safeId}','detalhe',this)">📋 Detalhe</button>
+      </div>
+      <div class="download-row">
+        <button class="btn-dl btn-dl-laudo"   onclick="downloadDoc('laudo','${escHtml(nome)}')"   id="btn-laudo-${idx}">
+          ⬇ Laudo Cliente
+        </button>
+        <button class="btn-dl btn-dl-interno" onclick="downloadDoc('interno','${escHtml(nome)}')" id="btn-interno-${idx}">
+          ⬇ Rel. Interno
+        </button>
+      </div>
+    </div>
+
+    <!-- Vista Resumo -->
+    <div class="view-resumo" id="${safeId}-resumo">
+      ${milvusHtml}
+      ${kpiHtml}
+      ${barsHtml}
+      ${alertasHtml}
+    </div>
+
+    <!-- Vista Detalhe -->
+    <div class="view-detalhe" id="${safeId}-detalhe" style="display:none">
+      <div class="search-row">
+        <input class="search-input" id="search-${safeId}" type="text" placeholder="Buscar hostname, SO, versão…" oninput="filterTable('${safeId}')">
+        <select class="filter-select" id="filter-cl-${safeId}" onchange="filterTable('${safeId}')">
+          <option value="">Todas classificações</option>
+          <option>EXCELENTE</option>
+          <option>ÓTIMO</option>
+          <option>BOM</option>
+          <option>SATISFATÓRIO</option>
+          <option>CRÍTICO</option>
+        </select>
+        <select class="filter-select" id="filter-al-${safeId}" onchange="filterTable('${safeId}')">
+          <option value="">Todos alertas</option>
+          <option value="armazenamento">💾 Armazenamento</option>
+          <option value="windows">🪟 Windows</option>
+          <option value="sem_contato">📡 Sem contato</option>
+          <option value="milvus">🔄 Milvus</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="dev-table" id="table-${safeId}">
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              <th>Status</th>
+              <th>Versão</th>
+              <th>Sistema Operacional</th>
+              <th>Último Contato</th>
+              <th>Alertas</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-${safeId}">${rowsHtml}</tbody>
+        </table>
+      </div>
+      <div id="no-results-${safeId}" class="no-results" style="display:none">
+        Nenhum dispositivo encontrado com esses filtros.
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="history-section" id="history-${safeId}">
+      <div class="history-title">Histórico de processamentos</div>
+      <div class="history-list" id="history-list-${safeId}">
+        <p class="history-empty">Carregando…</p>
+      </div>
+    </div>
+
+  </div>`;
+}
+
+// ── Vista toggle ──────────────────────────────────────────────────────────────
+function switchVista(tabId, vista, btn){
+  document.getElementById(tabId+'-resumo').style.display  = vista==='resumo'  ? '' : 'none';
+  document.getElementById(tabId+'-detalhe').style.display = vista==='detalhe' ? '' : 'none';
+  btn.closest('.vista-toggle').querySelectorAll('.vista-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Table filter ──────────────────────────────────────────────────────────────
+// Store raw dispositivos data per tab for filtering
+const _tabData = {};
+
+function filterTable(tabId){
+  const search  = (document.getElementById('search-'+tabId)?.value||'').toLowerCase();
+  const clFilt  = (document.getElementById('filter-cl-'+tabId)?.value||'');
+  const alFilt  = (document.getElementById('filter-al-'+tabId)?.value||'');
+  const devs    = _tabData[tabId] || [];
+  const tbody   = document.getElementById('tbody-'+tabId);
+  const noRes   = document.getElementById('no-results-'+tabId);
+  if(!tbody) return;
+
+  const filtered = devs.filter(d=>{
+    const matchSearch = !search || [d.hostname,d.versao,d.so,d.ultimo_contato]
+      .some(v=>v.toLowerCase().includes(search));
+    const matchCl = !clFilt || d.classificacao === clFilt;
+    const matchAl = !alFilt || (d.alertas||[]).some(a=>a.tipo===alFilt);
+    return matchSearch && matchCl && matchAl;
+  });
+
+  tbody.innerHTML = filtered.map(d=>`
+    <tr>
+      <td class="hostname">${escHtml(d.hostname)}</td>
+      <td>${classifBadge(d.classificacao)}</td>
+      <td style="font-family:monospace;font-size:11px">${escHtml(d.versao)}</td>
+      <td>${escHtml(d.so)}</td>
+      <td style="white-space:nowrap">${escHtml(d.ultimo_contato)}</td>
+      <td>${alertBadges(d.alertas)}</td>
+    </tr>`).join('');
+
+  noRes.style.display = filtered.length ? 'none' : '';
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+let _historyLoaded = {};
+
+function activateTab(idx){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
+  document.getElementById('tab_'+idx)?.classList.add('active');
+  // Load history lazily
+  if(!_historyLoaded[idx]){
+    _historyLoaded[idx] = true;
+    loadHistory(idx);
+  }
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+let _clientNames = [];
+
+function loadHistory(idx){
+  const nome = _clientNames[idx];
+  if(!nome) return;
+  const el = document.getElementById('history-list-tab_'+idx);
+  // element id is history-list-tab_N
+  const listEl = document.getElementById('history-list-tab_'+idx);
+  if(!listEl) return;
+
+  fetch('/api/snapshots/'+encodeURIComponent(nome))
+    .then(r=>r.json())
+    .then(data=>{
+      const snaps = data.snapshots || [];
+      if(!snaps.length){
+        listEl.innerHTML = '<p class="history-empty">Nenhum histórico ainda para este cliente.</p>';
+        return;
+      }
+      listEl.innerHTML = snaps.map(s=>{
+        const dt = s.data_processamento
+          ? new Date(s.data_processamento).toLocaleString('pt-BR')
+          : '—';
+        const critico = s.qtd_critico || 0;
+        return `<div class="history-item">
+          <span class="history-date">📅 ${dt}</span>
+          <div class="history-stats">
+            <span class="hstat hstat-total">${s.total_dispositivos} disp.</span>
+            ${critico>0?`<span class="hstat hstat-critico">⚠ ${critico} crítico${critico>1?'s':''}</span>`:''}
+            ${s.qtd_excelente>0?`<span class="hstat hstat-bom">✓ ${s.qtd_excelente} excelente${s.qtd_excelente>1?'s':''}</span>`:''}
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(()=>{
+      listEl.innerHTML = '<p class="history-empty">Erro ao carregar histórico.</p>';
+    });
+}
+
+// ── Downloads ─────────────────────────────────────────────────────────────────
+function downloadDoc(tipo, nome){
+  const url = tipo==='laudo' ? '/baixar-laudo-unico' : '/baixar-relatorio-unico';
+  fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({cliente: nome}),
+  })
+  .then(r=>{
+    if(!r.ok) return r.json().then(d=>{throw new Error(d.erro||'Erro')});
+    return r.blob();
+  })
+  .then(blob=>{
+    const safe = nome.replace(/[^a-zA-Z0-9 _-]/g,'_').substring(0,40);
+    const fname = tipo==='laudo'
+      ? `Laudo_Eficiencia_${safe}.xlsx`
+      : `Relatorio_Interno_${safe}.xlsx`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  })
+  .catch(e=>alert('Erro no download: '+e.message));
+}
+
+// ── Initial load ──────────────────────────────────────────────────────────────
+async function init(){
+  try {
+    const r = await fetch('/api/dados-visualizacao');
+    const data = await r.json();
+
+    if(data.erro){
+      document.getElementById('loading-screen').style.display='none';
+      document.getElementById('error-screen').style.display='';
+      document.getElementById('error-msg').textContent = data.erro;
+      return;
+    }
+
+    const clientes = data.clientes || [];
+    _clientNames   = clientes.map(c=>c.nome);
+
+    if(!clientes.length){
+      document.getElementById('loading-screen').style.display='none';
+      document.getElementById('error-screen').style.display='';
+      document.getElementById('error-msg').textContent = 'Nenhum cliente encontrado nos dados.';
+      return;
+    }
+
+    // Header meta
+    document.getElementById('total-geral-label').textContent =
+      `${data.total_geral} dispositivos · ${clientes.length} clientes`;
+    if(data.versao_ref){
+      const vEl = document.getElementById('versao-ref-label');
+      vEl.textContent = 'Agente ref: ' + data.versao_ref;
+      vEl.style.display='';
+    }
+    document.getElementById('header-meta').style.display='';
+
+    // Build tabs
+    const tabsBar  = document.getElementById('tabs-bar');
+    const tabsBody = document.getElementById('tabs-body');
+
+    clientes.forEach((cli, idx)=>{
+      // Tab button
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn' + (idx===0?' active':'');
+      const total = cli.resumo?.total || 0;
+      btn.innerHTML = escHtml(cli.nome) +
+        `<span class="tab-count">${total}</span>`;
+      btn.onclick = ()=>activateTab(idx);
+      tabsBar.appendChild(btn);
+
+      // Tab content
+      tabsBody.insertAdjacentHTML('beforeend', renderTab(cli, idx));
+
+      // Store dispositivos for filtering
+      _tabData['tab_'+idx] = cli.dispositivos;
+
+      // Set up history element reference mapping
+      const histList = document.getElementById('history-list-tab_'+idx);
+      // already in DOM via renderTab, just remap the id
+    });
+
+    // Fix history list IDs (renderTab uses history-list-${safeId} = history-list-tab_N)
+    // Already correct since safeId = 'tab_' + idx
+
+    // Load first tab's history
+    _historyLoaded[0] = true;
+    loadHistory(0);
+
+    // Show main content
+    document.getElementById('loading-screen').style.display='none';
+    document.getElementById('main-content').style.display='';
+
+  } catch(e){
+    document.getElementById('loading-screen').style.display='none';
+    document.getElementById('error-screen').style.display='';
+    document.getElementById('error-msg').textContent = 'Erro ao carregar dados: ' + e.message;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
