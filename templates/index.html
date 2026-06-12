@@ -410,20 +410,8 @@ function triggerDownload(blob, filename) {
 
 // ── Handler compartilhado após upload/sync bem-sucedido ───────────────────────
 function handleDadosCarregados(data, fonte) {
-  fonteDados = fonte;
-  clientesDisponiveis = data.clientes;
-  contagemClientes    = data.contagem;
-  renderClientGrid();
-  const badgeTotal = document.getElementById('total-disp-badge');
-  badgeTotal.textContent = data.total_dispositivos + ' dispositivos · ' + data.clientes.length + ' clientes';
-  const fonteBadge = document.getElementById('fonte-badge');
-  if (fonte === 'api') {
-    fonteBadge.textContent = '🔄 via API Milvus';
-    fonteBadge.classList.remove('hidden');
-  } else {
-    fonteBadge.classList.add('hidden');
-  }
-  showStep(2);
+  // Phase 2: redireciona para tela de visualização integrada
+  window.location.href = '/visualizar';
 }
 
 // ── ETAPA 1A: Sincronizar via API ─────────────────────────────────────────────
