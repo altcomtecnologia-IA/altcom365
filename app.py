@@ -340,6 +340,203 @@ def baixar_relatorios_internos():
         return jsonify({'erro': f'Erro ao gerar relatórios internos: {str(e)}'}), 500
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 — VISUALIZAÇÃO EM TELA
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/visualizar')
+def visualizar():
+    """Tela de visualização integrada — Phase 2."""
+    return render_template('visualizar.html')
+
+
+@app.route('/api/dados-visualizacao', methods=['GET'])
+def api_dados_visualizacao():
+    """
+    Retorna dados completos por cliente para a tela de visualização.
+    Auto-salva snapshot no PostgreSQL para cada cliente.
+    """
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+    n_desat    = sess_data['n_desatualizadas']
+    pct_desat  = sess_data['pct_desatualizadas']
+
+    clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
+    resultado  = []
+    snaps_buf  = []
+
+    for cliente in clientes:
+        df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+        df_alertas = calcular_alertas(df_cli, versao_ref)
+        df_norm    = normalize_df(df_alertas)
+
+        resumo  = resumo_alertas(df_norm, versao_ref, n_desat, pct_desat)
+        results = df_norm.apply(classify, axis=1)
+
+        dispositivos = []
+        for i, row in df_norm.iterrows():
+            classif = results.loc[i, 'Classificação'] if i in results.index else ''
+
+            alertas_ativos = []
+            for col, tipo in [
+                ('_alerta_armazenamento', 'armazenamento'),
+                ('_alerta_windows',       'windows'),
+                ('_alerta_sem_contato',   'sem_contato'),
+                ('_alerta_milvus',        'milvus'),
+            ]:
+                val = row.get(col, '')
+                if val:
+                    alertas_ativos.append({'tipo': tipo, 'msg': str(val)})
+
+            data_at = row.get('DATA DE ATUALIZAÇÃO', '')
+            if hasattr(data_at, 'strftime'):
+                data_at = data_at.strftime('%d/%m/%Y %H:%M')
+            elif data_at and str(data_at).lower() not in ('nan', 'nat', 'none', ''):
+                data_at = str(data_at)
+            else:
+                data_at = '—'
+
+            dispositivos.append({
+                'hostname':       str(row.get('NOME DO DISPOSITIVO', '—')),
+                'classificacao':  classif,
+                'versao':         str(row.get('VERSÃO DO CLIENT', '—')),
+                'so':             str(row.get('SISTEMA OPERACIONAL', '—')),
+                'ultimo_contato': data_at,
+                'alertas':        alertas_ativos,
+            })
+
+        resultado.append({
+            'nome':         cliente,
+            'resumo':       resumo,
+            'dispositivos': dispositivos,
+        })
+
+        # Buffer snapshot para salvar no banco
+        r = resumo.get('resumo', [])
+        snaps_buf.append(LaudosSnapshots(
+            nome_fantasia      = cliente,
+            data_processamento = datetime.utcnow(),
+            total_dispositivos = resumo.get('total', 0),
+            qtd_critico        = next((x['qtd'] for x in r if x['label'] == 'CRÍTICO'),       0),
+            qtd_satisfatorio   = next((x['qtd'] for x in r if x['label'] == 'SATISFATÓRIO'),  0),
+            qtd_bom            = next((x['qtd'] for x in r if x['label'] == 'BOM'),           0),
+            qtd_otimo          = next((x['qtd'] for x in r if x['label'] == 'ÓTIMO'),         0),
+            qtd_excelente      = next((x['qtd'] for x in r if x['label'] == 'EXCELENTE'),     0),
+            qtd_alertas        = resumo.get('alertas', {}),
+        ))
+
+    # Salva todos os snapshots de uma vez
+    try:
+        for snap in snaps_buf:
+            db.session.add(snap)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.warning(f'Snapshots não salvos: {e}')
+
+    return jsonify({
+        'clientes':    resultado,
+        'versao_ref':  versao_ref,
+        'total_geral': len(df),
+    })
+
+
+@app.route('/api/snapshots/<path:nome_fantasia>', methods=['GET'])
+def api_snapshots(nome_fantasia):
+    """Histórico de snapshots de um cliente (últimos 20)."""
+    try:
+        snaps = (LaudosSnapshots.query
+                 .filter_by(nome_fantasia=nome_fantasia)
+                 .order_by(LaudosSnapshots.data_processamento.desc())
+                 .limit(20)
+                 .all())
+        return jsonify({'snapshots': [s.to_dict() for s in snaps]})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/baixar-laudo-unico', methods=['POST'])
+def baixar_laudo_unico():
+    """Download do laudo de eficiência de um único cliente."""
+    data    = request.get_json(force=True, silent=True) or {}
+    cliente = data.get('cliente', '')
+    if not cliente:
+        return jsonify({'erro': 'Cliente não informado.'}), 400
+
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+    df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+    if df_cli.empty:
+        return jsonify({'erro': 'Cliente não encontrado.'}), 404
+
+    try:
+        df_norm = normalize_df(calcular_alertas(df_cli, versao_ref))
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            build_laudo_cliente(df_norm, out_path, cliente)
+            xlsx_data = open(out_path, 'rb').read()
+        finally:
+            try: os.unlink(out_path)
+            except: pass
+
+        safe = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in cliente)[:40]
+        return send_file(io.BytesIO(xlsx_data),
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True,
+                         download_name=f'Laudo_Eficiencia_{safe}.xlsx')
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao gerar laudo: {str(e)}'}), 500
+
+
+@app.route('/baixar-relatorio-unico', methods=['POST'])
+def baixar_relatorio_unico():
+    """Download do relatório interno de um único cliente."""
+    data    = request.get_json(force=True, silent=True) or {}
+    cliente = data.get('cliente', '')
+    if not cliente:
+        return jsonify({'erro': 'Cliente não informado.'}), 400
+
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+    df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+    if df_cli.empty:
+        return jsonify({'erro': 'Cliente não encontrado.'}), 404
+
+    try:
+        df_norm = normalize_df(calcular_alertas(df_cli, versao_ref))
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
+            xlsx_data = open(out_path, 'rb').read()
+        finally:
+            try: os.unlink(out_path)
+            except: pass
+
+        safe = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in cliente)[:40]
+        return send_file(io.BytesIO(xlsx_data),
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True,
+                         download_name=f'Relatorio_Interno_{safe}.xlsx')
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao gerar relatório: {str(e)}'}), 500
+
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ROTAS LEGADAS — formato antigo (retrocompatibilidade)
 # ══════════════════════════════════════════════════════════════════════════════
