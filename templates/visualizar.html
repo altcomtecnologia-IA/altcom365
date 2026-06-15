@@ -201,6 +201,28 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
   table.dev-table{font-size:11px}
   .tab-btn{padding:10px 12px;font-size:12px}
 }
+
+/* ── Barra de sincronização de IDs ─────────────────────── */
+#sync-bar{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;background:var(--navy2);border:1px solid rgba(255,255,255,.07);
+  border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:var(--gray3)}
+#sync-bar.rodando{border-color:rgba(0,200,212,.35)}
+#sync-bar.ok{border-color:rgba(80,200,120,.3)}
+#sync-bar.alerta{border-color:rgba(255,193,7,.3)}
+.sync-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sync-dot.ok{background:#4CAF50}
+.sync-dot.rodando{background:var(--cyan);animation:pulse 1.2s infinite}
+.sync-dot.alerta{background:#FFC107}
+.sync-dot.erro{background:#FF6B6B}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.btn-sync{background:transparent;color:var(--cyan);border:1px solid rgba(0,200,212,.4);
+  border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;
+  white-space:nowrap;transition:all .15s}
+.btn-sync:hover{background:rgba(0,200,212,.1)}
+.btn-sync:disabled{opacity:.5;cursor:wait}
+.sync-progress{font-size:11px;color:var(--cyan)}
+.sync-countdown{font-size:11px;color:var(--gray4)}
 </style>
 </head>
 <body>
@@ -247,6 +269,18 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
 
   <!-- Main content -->
   <div id="main-content" style="display:none">
+
+    <!-- Sync IDs bar -->
+    <div id="sync-bar" class="alerta">
+      <div class="sync-info">
+        <span class="sync-dot alerta" id="sync-dot"></span>
+        <span id="sync-status-text">IDs não sincronizados — execute sincronização para habilitar o push</span>
+      </div>
+      <button class="btn-sync" id="btn-sync-ids" onclick="iniciarSyncIds()">
+        🔄 Sincronizar IDs Milvus
+      </button>
+    </div>
+
     <!-- Tabs bar -->
     <div class="tabs-wrapper">
       <div class="tabs-bar" id="tabs-bar"></div>
@@ -722,6 +756,105 @@ async function solicitarPushMilvus(nomeCliente){
     btns.forEach(b=>{ b.disabled=false; b.textContent='🚀 Solicitar push à Milvus'; });
   }
 }
+
+// ── Sincronização de IDs Milvus ──────────────────────────────────────────────
+let _syncPollTimer = null;
+
+function atualizarBarraSync(data) {
+  const bar   = document.getElementById('sync-bar');
+  const dot   = document.getElementById('sync-dot');
+  const txt   = document.getElementById('sync-status-text');
+  const btn   = document.getElementById('btn-sync-ids');
+  if (!bar) return;
+
+  const rodando = data.status === 'running';
+  const erro    = data.status && data.status.startsWith('erro');
+  const done    = data.status === 'done';
+
+  if (rodando) {
+    bar.className   = 'rodando';
+    dot.className   = 'sync-dot rodando';
+    const pg        = data.pagina  || 0;
+    const tot       = data.total   || '?';
+    const map       = data.mapeados || 0;
+    txt.innerHTML   = `<strong>Sincronizando...</strong> página ${pg} · ${map} mapeados até agora`;
+    btn.disabled    = true;
+    btn.textContent = '⏳ Sincronizando…';
+    // continuar polling
+    if (!_syncPollTimer) _syncPollTimer = setInterval(pollSyncStatus, 3000);
+  } else if (erro) {
+    bar.className   = 'alerta';
+    dot.className   = 'sync-dot erro';
+    txt.textContent = '❌ Erro na sincronização: ' + (data.status || '');
+    btn.disabled    = false;
+    btn.textContent = '🔄 Tentar novamente';
+    clearInterval(_syncPollTimer); _syncPollTimer = null;
+  } else if (done || data.total_mapeados > 0) {
+    // Job concluído ou status geral com mapeados
+    bar.className   = 'ok';
+    dot.className   = 'sync-dot ok';
+    const n   = data.mapeados || data.total_mapeados || 0;
+    const dt  = data.ultima_sync || null;
+    let   dtStr = '';
+    if (dt) {
+      try {
+        const d = new Date(dt);
+        dtStr = ' · ' + d.toLocaleDateString('pt-BR') + ' às ' +
+                d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+      } catch(_) {}
+    }
+    txt.innerHTML   = `<strong>${n} IDs mapeados</strong>${dtStr}`;
+    btn.disabled    = false;
+    btn.textContent = '🔄 Re-sincronizar';
+    clearInterval(_syncPollTimer); _syncPollTimer = null;
+  } else {
+    // Sem mapeamentos ainda
+    bar.className   = 'alerta';
+    dot.className   = 'sync-dot alerta';
+    txt.textContent = 'IDs não sincronizados — execute sincronização para habilitar o push';
+    btn.disabled    = false;
+    btn.textContent = '🔄 Sincronizar IDs Milvus';
+    clearInterval(_syncPollTimer); _syncPollTimer = null;
+  }
+}
+
+async function pollSyncStatus() {
+  try {
+    const r    = await fetch('/sync-ids/status');
+    const data = await r.json();
+    atualizarBarraSync(data);
+  } catch(_) {}
+}
+
+async function iniciarSyncIds() {
+  const btn = document.getElementById('btn-sync-ids');
+  btn.disabled = true;
+  btn.textContent = '⏳ Iniciando…';
+  try {
+    const r    = await fetch('/sync-ids', {method:'POST'});
+    const data = await r.json();
+    if (!data.ok && !data.job_id) {
+      alert('Erro ao iniciar sincronização: ' + (data.msg || data.erro || 'Desconhecido'));
+      btn.disabled = false;
+      btn.textContent = '🔄 Sincronizar IDs Milvus';
+      return;
+    }
+    // Começa a fazer polling
+    if (_syncPollTimer) clearInterval(_syncPollTimer);
+    _syncPollTimer = setInterval(pollSyncStatus, 3000);
+    await pollSyncStatus();
+  } catch(e) {
+    alert('Erro de rede ao iniciar sincronização.');
+    btn.disabled = false;
+    btn.textContent = '🔄 Sincronizar IDs Milvus';
+  }
+}
+
+// Verificar status ao carregar a página
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(pollSyncStatus, 1500);
+});
+
 </script>
 </body>
 </html>
