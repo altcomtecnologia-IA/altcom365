@@ -20,6 +20,8 @@ from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
 from models import db, ClientesMap, DispositivosMap, LaudosSnapshots
 import pandas as pd
 import milvus_api
+import threading
+from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -1063,6 +1065,68 @@ def api_push_milvus():
         'nao_mapeados':  nao_mapeados,
         'detalhes_api':  detalhes,
     }), 200 if ok else 502
+
+
+# ── APScheduler — job diário de sync de IDs ──────────────────────────────────
+def _job_sync_ids_diario():
+    """Executado às 02:00 diariamente para manter DispositivosMap atualizado."""
+    import requests as _req
+    import time as _t
+    token = os.environ.get('MILVUS_API_TOKEN')
+    if not token:
+        logger.warning('job_sync_ids: MILVUS_API_TOKEN não configurado — pulando')
+        return
+    with app.app_context():
+        from models import db as _db, DispositivosMap as _DM
+        try:
+            pagina = 1
+            agora  = datetime.utcnow()
+            while True:
+                resp = _req.post(
+                    'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
+                    json={'is_paginate': True, 'total_registros': 50, 'pagina': pagina},
+                    headers={'Authorization': token, 'Content-Type': 'application/json'},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                data    = resp.json()
+                lista   = data.get('lista', [])
+                last_pg = int(data.get('meta', {}).get('paginate', {}).get('last_page', 1))
+                for item in lista:
+                    host = (item.get('hostname') or '').strip()
+                    nome = (item.get('nome_fantasia') or '').strip()
+                    if not host or not nome:
+                        continue
+                    did   = item.get('id') or item.get('dispositivo_id')
+                    ativo = item.get('is_ativo', True)
+                    entry = _DM.query.filter_by(hostname=host, nome_fantasia=nome).first()
+                    if entry:
+                        entry.milvus_dispositivo_id = did
+                        entry.is_ativo    = ativo
+                        entry.ultima_sync = agora
+                    else:
+                        _db.session.add(_DM(
+                            hostname=host, nome_fantasia=nome,
+                            milvus_dispositivo_id=did,
+                            is_ativo=ativo, ultima_sync=agora,
+                        ))
+                _db.session.commit()
+                if pagina >= last_pg:
+                    break
+                pagina += 1
+                _t.sleep(61)
+            logger.info('job_sync_ids: concluído — página %d/%d', pagina, last_pg)
+        except Exception:
+            logger.exception('job_sync_ids: erro durante execução diária')
+
+try:
+    _scheduler = BackgroundScheduler(timezone='America/Sao_Paulo')
+    _scheduler.add_job(_job_sync_ids_diario, 'cron', hour=2, minute=0,
+                       id='sync_ids_diario', replace_existing=True)
+    _scheduler.start()
+    logger.info('APScheduler iniciado — sync_ids agendado para 02:00 BRT')
+except Exception as _sch_err:
+    logger.warning('APScheduler não iniciado: %s', _sch_err)
 
 
 if __name__ == '__main__':
