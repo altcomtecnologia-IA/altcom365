@@ -393,7 +393,8 @@ def api_dados_visualizacao():
                 if val:
                     alertas_ativos.append({'tipo': tipo, 'msg': str(val)})
 
-            data_at = row.get('DATA DE ATUALIZAÇÃO', '')
+            # Após normalize_df, colunas UPPERCASE viram mixed-case (COL_MAP_NOVO)
+            data_at = row.get('Data de atualização', row.get('DATA DE ATUALIZAÇÃO', ''))
             if hasattr(data_at, 'strftime'):
                 data_at = data_at.strftime('%d/%m/%Y %H:%M')
             elif data_at and str(data_at).lower() not in ('nan', 'nat', 'none', ''):
@@ -402,10 +403,10 @@ def api_dados_visualizacao():
                 data_at = '—'
 
             dispositivos.append({
-                'hostname':       str(row.get('NOME DO DISPOSITIVO', '—')),
+                'hostname':       str(row.get('Nome do dispositivo', row.get('NOME DO DISPOSITIVO', '—'))),
                 'classificacao':  classif,
-                'versao':         str(row.get('VERSÃO DO CLIENT', '—')),
-                'so':             str(row.get('SISTEMA OPERACIONAL', '—')),
+                'versao':         str(row.get('Versão do client', row.get('VERSÃO DO CLIENT', '—'))),
+                'so':             str(row.get('Sistema operacional', row.get('SISTEMA OPERACIONAL', '—'))),
                 'ultimo_contato': data_at,
                 'alertas':        alertas_ativos,
             })
@@ -983,12 +984,4 @@ def sync_ids_status():
     if job_id and job_id in _sync_jobs:
         return jsonify(_sync_jobs[job_id])
     n = DispositivosMap.query.count()
-    ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
-    return jsonify({
-        'total_mapeados': n,
-        'ultima_sync': ultima.isoformat() if ultima else None,
-    })
-
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)
