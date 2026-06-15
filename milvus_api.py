@@ -183,3 +183,60 @@ def listar_dispositivos() -> tuple[pd.DataFrame | None, str | None]:
         msg = f"Erro inesperado ao sincronizar com Milvus: {exc}"
         logger.exception("milvus_api: erro inesperado")
         return None, msg
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PUSH DE ATUALIZAÇÃO DO AGENTE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def push_atualizacao(dispositivo_ids: list) -> tuple:
+    """
+    Dispara atualização do agente Milvus para uma lista de IDs de dispositivos.
+    Chama POST /api/dispositivos/push com {"ids": [...]}
+
+    Retorna (sucesso: bool, mensagem: str, detalhes: dict).
+    """
+    token = _token()
+    if not token:
+        return False, "MILVUS_API_TOKEN não configurado no servidor.", {}
+
+    if not dispositivo_ids:
+        return False, "Nenhum ID de dispositivo informado.", {}
+
+    url = f"{API_BASE}/api/dispositivos/push"
+    headers = {
+        "Authorization": token,
+        "Content-Type":  "application/json",
+    }
+    body = {"ids": dispositivo_ids}
+
+    logger.info("milvus_api: push_atualizacao para %d dispositivo(s): %s",
+                len(dispositivo_ids), dispositivo_ids[:10])
+
+    try:
+        resp = requests.post(url, json=body, headers=headers, timeout=TIMEOUT_S)
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info("milvus_api: push OK — resposta: %s", str(data)[:200])
+        return True, f"Push solicitado para {len(dispositivo_ids)} dispositivo(s).", data
+
+    except requests.exceptions.Timeout:
+        msg = "Milvus não respondeu ao push. Tente novamente em instantes."
+        logger.error("milvus_api: push timeout")
+        return False, msg, {}
+
+    except requests.exceptions.HTTPError as exc:
+        status   = exc.response.status_code if exc.response else 0
+        body_txt = exc.response.text[:300]  if exc.response else ""
+        if   status == 401: msg = "Token Milvus rejeitado. Verifique o MILVUS_API_TOKEN."
+        elif status == 400: msg = f"Requisição inválida ao Milvus: {body_txt}"
+        elif status == 429: msg = "Limite de chamadas Milvus atingido. Aguarde 1 minuto."
+        elif status >= 500: msg = "Erro temporário no Milvus. Tente novamente em minutos."
+        else:               msg = f"Erro HTTP {status} no push Milvus: {body_txt}"
+        logger.error("milvus_api: push HTTP %d — %s", status, msg)
+        return False, msg, {}
+
+    except Exception as exc:  # noqa: BLE001
+        msg = f"Erro inesperado no push Milvus: {exc}"
+        logger.exception("milvus_api: push erro inesperado")
+        return False, msg, {}
