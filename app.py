@@ -889,7 +889,8 @@ def sync_clientes():
 
 
 # Dicionário em memória para rastrear jobs de sync_ids
-_sync_jobs: dict = {}
+_sync_jobs:       dict = {}
+_current_job_id:  str  = ''     # último job iniciado (para polling sem job_id)
 
 
 @app.route('/sync-ids', methods=['POST'])
@@ -905,8 +906,10 @@ def sync_ids():
     if not mtoken:
         return jsonify({'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
 
+    global _current_job_id
     job_id = str(uuid.uuid4())[:8]
     _sync_jobs[job_id] = {'status': 'running', 'pagina': 0, 'total': 0, 'mapeados': 0}
+    _current_job_id = job_id
 
     def _run(jid, tok):
         import requests as req
@@ -982,14 +985,21 @@ def sync_ids():
 @app.route('/sync-ids/status', methods=['GET'])
 def sync_ids_status():
     """Retorna o progresso do job de sync_ids (ou status geral do banco)."""
-    job_id = request.args.get('job_id')
+    job_id = request.args.get('job_id') or _current_job_id
     if job_id and job_id in _sync_jobs:
-        return jsonify(_sync_jobs[job_id])
+        job = dict(_sync_jobs[job_id])
+        # Enriquecer com totais do banco quando concluído
+        if job.get('status') == 'done':
+            job['total_mapeados'] = DispositivosMap.query.count()
+            ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
+            job['ultima_sync'] = ultima.isoformat() if ultima else None
+        return jsonify(job)
     n = DispositivosMap.query.count()
     ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
     return jsonify({
+        'status':        'idle',
         'total_mapeados': n,
-        'ultima_sync': ultima.isoformat() if ultima else None,
+        'ultima_sync':   ultima.isoformat() if ultima else None,
     })
 
 
