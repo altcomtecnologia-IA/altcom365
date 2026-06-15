@@ -759,101 +759,105 @@ async function solicitarPushMilvus(nomeCliente){
 
 // ── Sincronização de IDs Milvus ──────────────────────────────────────────────
 let _syncPollTimer = null;
+let _syncJobId     = null;   // job_id do último sync iniciado nesta sessão
+
+function _fmtData(dtStr) {
+  if (!dtStr) return '';
+  try {
+    const d = new Date(dtStr);
+    return ' · ' + d.toLocaleDateString('pt-BR') +
+           ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  } catch(_) { return ''; }
+}
 
 function atualizarBarraSync(data) {
-  const bar   = document.getElementById('sync-bar');
-  const dot   = document.getElementById('sync-dot');
-  const txt   = document.getElementById('sync-status-text');
-  const btn   = document.getElementById('btn-sync-ids');
+  const bar = document.getElementById('sync-bar');
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-status-text');
+  const btn = document.getElementById('btn-sync-ids');
   if (!bar) return;
 
-  const rodando = data.status === 'running';
-  const erro    = data.status && data.status.startsWith('erro');
-  const done    = data.status === 'done';
+  const st = data.status || 'idle';
 
-  if (rodando) {
-    bar.className   = 'rodando';
-    dot.className   = 'sync-dot rodando';
-    const pg        = data.pagina  || 0;
-    const tot       = data.total   || '?';
-    const map       = data.mapeados || 0;
-    txt.innerHTML   = `<strong>Sincronizando...</strong> página ${pg} · ${map} mapeados até agora`;
-    btn.disabled    = true;
+  if (st === 'running') {
+    bar.className  = 'rodando';
+    dot.className  = 'sync-dot rodando';
+    const pg  = data.pagina   || 0;
+    const map = data.mapeados || 0;
+    txt.innerHTML  = `<strong>Sincronizando…</strong> página ${pg} · ${map} mapeados`;
+    btn.disabled   = true;
     btn.textContent = '⏳ Sincronizando…';
-    // continuar polling
     if (!_syncPollTimer) _syncPollTimer = setInterval(pollSyncStatus, 3000);
-  } else if (erro) {
-    bar.className   = 'alerta';
-    dot.className   = 'sync-dot erro';
-    txt.textContent = '❌ Erro na sincronização: ' + (data.status || '');
-    btn.disabled    = false;
-    btn.textContent = '🔄 Tentar novamente';
-    clearInterval(_syncPollTimer); _syncPollTimer = null;
-  } else if (done || data.total_mapeados > 0) {
-    // Job concluído ou status geral com mapeados
-    bar.className   = 'ok';
-    dot.className   = 'sync-dot ok';
-    const n   = data.mapeados || data.total_mapeados || 0;
-    const dt  = data.ultima_sync || null;
-    let   dtStr = '';
-    if (dt) {
-      try {
-        const d = new Date(dt);
-        dtStr = ' · ' + d.toLocaleDateString('pt-BR') + ' às ' +
-                d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
-      } catch(_) {}
-    }
-    txt.innerHTML   = `<strong>${n} IDs mapeados</strong>${dtStr}`;
-    btn.disabled    = false;
+
+  } else if (st === 'done') {
+    bar.className  = 'ok';
+    dot.className  = 'sync-dot ok';
+    const n = data.total_mapeados || data.mapeados || 0;
+    txt.innerHTML  = `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`;
+    btn.disabled   = false;
     btn.textContent = '🔄 Re-sincronizar';
     clearInterval(_syncPollTimer); _syncPollTimer = null;
+
+  } else if (st.startsWith('erro')) {
+    bar.className  = 'alerta';
+    dot.className  = 'sync-dot erro';
+    txt.textContent = '❌ Erro: ' + st;
+    btn.disabled   = false;
+    btn.textContent = '🔄 Tentar novamente';
+    clearInterval(_syncPollTimer); _syncPollTimer = null;
+
   } else {
-    // Sem mapeamentos ainda
-    bar.className   = 'alerta';
-    dot.className   = 'sync-dot alerta';
-    txt.textContent = 'IDs não sincronizados — execute sincronização para habilitar o push';
-    btn.disabled    = false;
-    btn.textContent = '🔄 Sincronizar IDs Milvus';
+    // idle — mostra total do banco se já tiver algum
+    const n = data.total_mapeados || 0;
+    if (n > 0) {
+      bar.className  = 'ok';
+      dot.className  = 'sync-dot ok';
+      txt.innerHTML  = `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`;
+      btn.textContent = '🔄 Re-sincronizar';
+    } else {
+      bar.className  = 'alerta';
+      dot.className  = 'sync-dot alerta';
+      txt.textContent = 'IDs não sincronizados — execute sincronização para habilitar o push';
+      btn.textContent = '🔄 Sincronizar IDs Milvus';
+    }
+    btn.disabled = false;
     clearInterval(_syncPollTimer); _syncPollTimer = null;
   }
 }
 
 async function pollSyncStatus() {
   try {
-    const r    = await fetch('/sync-ids/status');
-    const data = await r.json();
+    const url  = '/sync-ids/status' + (_syncJobId ? '?job_id=' + _syncJobId : '');
+    const data = await (await fetch(url)).json();
     atualizarBarraSync(data);
   } catch(_) {}
 }
 
 async function iniciarSyncIds() {
   const btn = document.getElementById('btn-sync-ids');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = '⏳ Iniciando…';
   try {
-    const r    = await fetch('/sync-ids', {method:'POST'});
-    const data = await r.json();
+    const data = await (await fetch('/sync-ids', {method:'POST'})).json();
     if (!data.ok && !data.job_id) {
-      alert('Erro ao iniciar sincronização: ' + (data.msg || data.erro || 'Desconhecido'));
-      btn.disabled = false;
+      alert('Erro ao iniciar: ' + (data.msg || data.erro || '?'));
+      btn.disabled    = false;
       btn.textContent = '🔄 Sincronizar IDs Milvus';
       return;
     }
-    // Começa a fazer polling
+    _syncJobId = data.job_id || null;
     if (_syncPollTimer) clearInterval(_syncPollTimer);
     _syncPollTimer = setInterval(pollSyncStatus, 3000);
     await pollSyncStatus();
   } catch(e) {
     alert('Erro de rede ao iniciar sincronização.');
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = '🔄 Sincronizar IDs Milvus';
   }
 }
 
-// Verificar status ao carregar a página
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(pollSyncStatus, 1500);
-});
+// Verificar status ao carregar a página (usa _current_job_id do servidor)
+document.addEventListener('DOMContentLoaded', () => setTimeout(pollSyncStatus, 1500));
 
 </script>
 </body>
