@@ -367,7 +367,7 @@ function renderTab(cli, idx){
       ${mi.n_desatualizadas > 0 ? `
       <button
         class="btn-push-milvus"
-        onclick="solicitarPushMilvus(${JSON.stringify(nomeCliente)})"
+        onclick="solicitarPushMilvus(${JSON.stringify(nome)})"
         title="Disparar atualização do agente Milvus nos ${mi.n_desatualizadas} dispositivo(s) desatualizado(s)">
         🚀 Solicitar push à Milvus
       </button>` : ''}
