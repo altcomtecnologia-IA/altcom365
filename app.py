@@ -925,14 +925,14 @@ def sync_ids():
                     try:
                         resp = req.post(
                             'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
-                            json={'is_paginate': True, 'total_registros': 50, 'pagina': pagina},
+                            json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
                             headers={'Authorization': tok, 'Content-Type': 'application/json'},
-                            timeout=30,
+                            timeout=60,
                         )
                         resp.raise_for_status()
                         data = resp.json()
                     except Exception as e:
-                        _sync_jobs[jid]['status'] = f'erro_pg{pagina}: {e}'
+                        _sync_jobs[jid]['status'] = f'erro_pg1: {e}'
                         return
 
                     meta    = data.get('meta', {}).get('paginate', {})
@@ -966,10 +966,6 @@ def sync_ids():
                     db.session.commit()
                     _sync_jobs[jid]['mapeados'] = mapeados
 
-                    if pagina >= last_pg:
-                        break
-                    pagina += 1
-                    _t.sleep(61)   # rate limit 1 req/min
 
                 _sync_jobs[jid]['status'] = 'done'
                 logger.info('sync_ids: %d dispositivos mapeados', mapeados)
@@ -1094,7 +1090,7 @@ def _job_sync_ids_diario():
             while True:
                 resp = _req.post(
                     'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
-                    json={'is_paginate': True, 'total_registros': 50, 'pagina': pagina},
+                    json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
                     headers={'Authorization': token, 'Content-Type': 'application/json'},
                     timeout=30,
                 )
@@ -1121,10 +1117,6 @@ def _job_sync_ids_diario():
                             is_ativo=ativo, ultima_sync=agora,
                         ))
                 _db.session.commit()
-                if pagina >= last_pg:
-                    break
-                pagina += 1
-                _t.sleep(61)
             logger.info('job_sync_ids: concluído — página %d/%d', pagina, last_pg)
         except Exception:
             logger.exception('job_sync_ids: erro durante execução diária')
