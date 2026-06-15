@@ -991,5 +991,79 @@ def sync_ids_status():
     })
 
 
+@app.route('/api/push-milvus', methods=['POST'])
+def api_push_milvus():
+    """
+    Phase 3 — Dispara push de atualização do agente Milvus para os dispositivos
+    desatualizados (versão != versao_ref) de um cliente específico.
+
+    Body JSON: {"cliente": "Nome Fantasia Do Cliente"}
+    """
+    data_req  = request.get_json(silent=True) or {}
+    nome_cli  = (data_req.get('cliente') or '').strip()
+
+    if not nome_cli:
+        return jsonify({'ok': False, 'erro': 'Nome do cliente não informado.'}), 400
+
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'ok': False, 'erro': 'Sessão expirada. Faça upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+
+    df_cli = df[df['NOME FANTASIA DO CLIENTE'] == nome_cli].copy()
+    if df_cli.empty:
+        return jsonify({'ok': False, 'erro': f'Cliente "{nome_cli}" não encontrado na sessão.'}), 404
+
+    # Identificar desatualizados via _alerta_milvus
+    df_alertas = calcular_alertas(df_cli, versao_ref)
+    mask_desat = df_alertas.get('_alerta_milvus', pd.Series(dtype=str)).fillna('').str.len() > 0
+    df_desat   = df_alertas[mask_desat]
+
+    if df_desat.empty:
+        return jsonify({
+            'ok':    True,
+            'msg':   'Todos os dispositivos já estão na versão de referência.',
+            'total': 0,
+        })
+
+    hostnames = df_desat['NOME DO DISPOSITIVO'].dropna().tolist()
+
+    # Buscar IDs Milvus no banco
+    milvus_ids   = []
+    nao_mapeados = []
+    for host in hostnames:
+        entry = DispositivosMap.query.filter_by(
+            hostname=host.strip(), nome_fantasia=nome_cli
+        ).first()
+        if entry and entry.milvus_dispositivo_id:
+            milvus_ids.append(entry.milvus_dispositivo_id)
+        else:
+            nao_mapeados.append(host)
+
+    if not milvus_ids:
+        return jsonify({
+            'ok':           False,
+            'erro':         ('Nenhum dispositivo mapeado no banco. '
+                             'Execute "Sincronizar IDs" e tente novamente.'),
+            'nao_mapeados': nao_mapeados,
+            'total_desat':  len(hostnames),
+        }), 400
+
+    # Chamar API Milvus
+    ok, msg, detalhes = milvus_api.push_atualizacao(milvus_ids)
+    logger.info('push-milvus: cliente=%s | ids=%s | ok=%s | msg=%s',
+                nome_cli, milvus_ids, ok, msg)
+
+    return jsonify({
+        'ok':            ok,
+        'msg':           msg,
+        'total_enviado': len(milvus_ids),
+        'nao_mapeados':  nao_mapeados,
+        'detalhes_api':  detalhes,
+    }), 200 if ok else 502
+
+
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
