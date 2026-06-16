@@ -223,6 +223,41 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
 .btn-sync:disabled{opacity:.5;cursor:wait}
 .sync-progress{font-size:11px;color:var(--cyan)}
 .sync-countdown{font-size:11px;color:var(--gray4)}
+
+/* ── Painel Global de Filtros ────────────────────────────────────────── */
+.painel-global-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 16px;background:var(--navy2);border-radius:var(--radius);
+  border:1px solid var(--navy3);margin-bottom:10px}
+.painel-global-bar .pg-label{font-size:11px;color:var(--gray4);white-space:nowrap;
+  margin-right:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.filtro-card{display:flex;align-items:center;gap:7px;padding:6px 12px;
+  border-radius:6px;border:1px solid transparent;cursor:pointer;
+  transition:all .18s;font-size:12px;font-weight:700;background:var(--navy3)}
+.filtro-card:hover{opacity:.85;transform:translateY(-1px)}
+.filtro-card.ativo{outline:2px solid var(--cyan);outline-offset:1px}
+.filtro-card.zero{opacity:.35;cursor:default;pointer-events:none}
+.filtro-card .fc-icon{font-size:14px}
+.filtro-card .fc-num{font-size:15px;font-weight:800;line-height:1}
+.filtro-card .fc-lbl{font-size:10px;opacity:.8;white-space:nowrap}
+/* Painel expandido com resultado do filtro */
+#painel-filtrado{background:var(--navy2);border-radius:var(--radius);
+  border:1px solid rgba(0,200,212,.25);margin-bottom:12px;overflow:hidden;
+  max-height:0;transition:max-height .3s ease}
+#painel-filtrado.aberto{max-height:600px}
+#pf-header{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;border-bottom:1px solid var(--navy3)}
+#pf-title{font-size:13px;font-weight:700;color:var(--cyan)}
+#pf-close{background:transparent;border:none;color:var(--gray4);
+  font-size:18px;cursor:pointer;line-height:1;padding:0 4px}
+#pf-close:hover{color:var(--white)}
+#pf-body{overflow-y:auto;max-height:520px}
+.pf-table{width:100%;border-collapse:collapse;font-size:11px}
+.pf-table th{background:var(--navy3);color:var(--cyan);font-weight:700;
+  padding:7px 10px;text-align:left;position:sticky;top:0;z-index:1}
+.pf-table td{padding:7px 10px;border-bottom:1px solid var(--navy3);
+  color:var(--gray3);vertical-align:middle}
+.pf-table tr:hover td{background:rgba(255,255,255,.03)}
+.pf-empty{padding:24px;text-align:center;color:var(--gray4);font-size:12px}
 </style>
 </head>
 <body>
@@ -283,6 +318,23 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
       <button class="btn-sync" id="btn-sync-ids" onclick="iniciarSyncIds()">
         🔄 Sincronizar IDs Milvus
       </button>
+    </div>
+
+
+    <!-- Painel Global de Filtros -->
+    <div id="painel-global" style="display:none">
+      <div class="painel-global-bar">
+        <span class="pg-label">🌐 Parque</span>
+        <div id="filtros-cards" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+      <!-- Painel expandido com dispositivos filtrados -->
+      <div id="painel-filtrado">
+        <div id="pf-header">
+          <span id="pf-title">Filtro</span>
+          <button id="pf-close" onclick="fecharFiltroPainel()" title="Fechar">✕</button>
+        </div>
+        <div id="pf-body"><div class="pf-empty">Carregando…</div></div>
+      </div>
     </div>
 
     <!-- Tabs bar -->
@@ -686,6 +738,10 @@ async function init(){
     // Fix history list IDs (renderTab uses history-list-${safeId} = history-list-tab_N)
     // Already correct since safeId = 'tab_' + idx
 
+    // Painel global de filtros
+    _allClientes = clientes;
+    buildPainelGlobal(clientes);
+
     // Load first tab's history
     _historyLoaded[0] = true;
     loadHistory(0);
@@ -699,6 +755,116 @@ async function init(){
     document.getElementById('error-screen').style.display='';
     document.getElementById('error-msg').textContent = 'Erro ao carregar dados: ' + e.message;
   }
+}
+
+
+// ── Painel Global de Filtros ─────────────────────────────────────────────────
+let _filtroAtivo = null;
+
+const FILTRO_DEFS = [
+  {tipo:'critico',        icon:'⚠️', lbl:'Laudados Troca', bg:'#6B0000', fg:'#FF6B6B'},
+  {tipo:'armazenamento',  icon:'💾', lbl:'Armazenamento',  bg:'#5D3A00', fg:'#FFC000'},
+  {tipo:'windows',        icon:'🪟', lbl:'Windows',        bg:'#003D5C', fg:'#00B0F0'},
+  {tipo:'sem_contato',    icon:'📡', lbl:'Sem contato',    bg:'#3D0000', fg:'#FF6B6B'},
+  {tipo:'milvus',         icon:'🔄', lbl:'Milvus',         bg:'#0D2E4A', fg:'#56CCF2'},
+];
+
+function _contarFiltro(clientes, tipo){
+  let n = 0;
+  clientes.forEach(cli => {
+    cli.dispositivos.forEach(d => {
+      if(tipo === 'critico')
+        n += (d.classificacao === 'CRÍTICO') ? 1 : 0;
+      else
+        n += d.alertas.some(a => a.tipo === tipo) ? 1 : 0;
+    });
+  });
+  return n;
+}
+
+function buildPainelGlobal(clientes){
+  const container = document.getElementById('filtros-cards');
+  if(!container) return;
+  container.innerHTML = '';
+
+  FILTRO_DEFS.forEach(def => {
+    const n = _contarFiltro(clientes, def.tipo);
+    const card = document.createElement('div');
+    card.className = 'filtro-card' + (n === 0 ? ' zero' : '');
+    card.dataset.tipo = def.tipo;
+    card.style.cssText = `background:${def.bg};color:${def.fg};border-color:${def.bg}`;
+    card.innerHTML = `
+      <span class="fc-icon">${def.icon}</span>
+      <div>
+        <div class="fc-num">${n}</div>
+        <div class="fc-lbl">${def.lbl}</div>
+      </div>`;
+    if(n > 0) card.onclick = () => ativarFiltro(def.tipo, def.icon + ' ' + def.lbl);
+    container.appendChild(card);
+  });
+
+  document.getElementById('painel-global').style.display = '';
+}
+
+function ativarFiltro(tipo, label){
+  // Toggle: clicar no mesmo filtro ativo fecha o painel
+  if(_filtroAtivo === tipo){
+    fecharFiltroPainel();
+    return;
+  }
+  _filtroAtivo = tipo;
+
+  // Marca card ativo
+  document.querySelectorAll('.filtro-card').forEach(c => {
+    c.classList.toggle('ativo', c.dataset.tipo === tipo);
+  });
+
+  // Coleta dispositivos correspondentes de todos os clientes
+  const linhas = [];
+  _allClientes.forEach(cli => {
+    cli.dispositivos.forEach(d => {
+      let match = (tipo === 'critico')
+        ? d.classificacao === 'CRÍTICO'
+        : d.alertas.some(a => a.tipo === tipo);
+      if(match){
+        const al = (tipo === 'critico')
+          ? '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>'
+          : alertBadges(d.alertas.filter(a => a.tipo === tipo));
+        linhas.push(`
+          <tr>
+            <td class="hostname">${escHtml(d.hostname)}</td>
+            <td>${escHtml(cli.nome)}</td>
+            <td>${classifBadge(d.classificacao)}</td>
+            <td style="font-size:11px;color:var(--gray3)">${escHtml(d.so.replace('Microsoft ','').replace(' for Workstations',''))}</td>
+            <td style="white-space:nowrap;font-size:11px">${escHtml(d.ultimo_contato)}</td>
+            <td>${al}</td>
+          </tr>`);
+      }
+    });
+  });
+
+  const body = document.getElementById('pf-body');
+  if(linhas.length === 0){
+    body.innerHTML = '<div class="pf-empty">Nenhum dispositivo encontrado.</div>';
+  } else {
+    body.innerHTML = `
+      <table class="pf-table">
+        <thead><tr>
+          <th>Dispositivo</th><th>Cliente</th><th>Classif.</th>
+          <th>S.O.</th><th>Último Contato</th><th>Alerta</th>
+        </tr></thead>
+        <tbody>${linhas.join('')}</tbody>
+      </table>`;
+  }
+
+  document.getElementById('pf-title').textContent = `${label} — ${linhas.length} dispositivo(s)`;
+  document.getElementById('painel-filtrado').classList.add('aberto');
+}
+
+function fecharFiltroPainel(){
+  _filtroAtivo = null;
+  document.querySelectorAll('.filtro-card').forEach(c => c.classList.remove('ativo'));
+  document.getElementById('painel-filtrado').classList.remove('aberto');
 }
 
 document.addEventListener('DOMContentLoaded', init);
