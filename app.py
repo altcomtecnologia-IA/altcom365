@@ -1040,80 +1040,99 @@ def download_relatorio_consolidado():
     Gera um único arquivo Excel com todos os Relatórios Internos da sessão atual,
     uma aba por cliente — download consolidado sem precisar abrir cliente por cliente.
     """
-    from openpyxl import load_workbook, Workbook
-    from copy import copy as _copy
+    try:
+        from openpyxl import load_workbook, Workbook
+        from copy import copy as _copy
 
-    sess_data = _get_current_session()
-    if sess_data is None:
-        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+        sess_data = _get_current_session()
+        if sess_data is None:
+            return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
 
-    df         = sess_data['df']
-    versao_ref = sess_data['versao_ref']
-    clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
+        df         = sess_data['df']
+        versao_ref = sess_data['versao_ref']
+        clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
 
-    combined_wb = Workbook()
-    combined_wb.remove(combined_wb.active)  # remove aba padrão vazia
+        combined_wb = Workbook()
+        combined_wb.remove(combined_wb.active)  # remove aba padrão vazia
 
-    for cliente in clientes:
-        df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
-        if df_cli.empty:
-            continue
-        df_alertas = calcular_alertas(df_cli, versao_ref)
-        df_norm    = normalize_df(df_alertas)
+        for cliente in clientes:
+            df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+            if df_cli.empty:
+                continue
+            df_alertas = calcular_alertas(df_cli, versao_ref)
+            df_norm    = normalize_df(df_alertas)
 
-        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-            out_path = tmp.name
-        try:
-            build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
-            src_wb = load_workbook(out_path)
-            src_ws = src_wb.active
-
-            # Nome da aba: até 31 chars, sem chars inválidos do Excel
-            sheet_name = re.sub(r'[\\/*?:\[\]]', '', cliente)[:31].strip()
-            dest_ws = combined_wb.create_sheet(title=sheet_name or f'Cliente_{len(combined_wb.sheetnames)+1}')
-
-            # Copiar dimensões de colunas e linhas
-            for col_letter, col_dim in src_ws.column_dimensions.items():
-                dest_ws.column_dimensions[col_letter].width = col_dim.width
-            for row_idx, row_dim in src_ws.row_dimensions.items():
-                dest_ws.row_dimensions[row_idx].height = row_dim.height
-
-            # Copiar células mescladas
-            for merged in list(src_ws.merged_cells.ranges):
-                dest_ws.merge_cells(str(merged))
-
-            # Copiar células com valores e estilos
-            for row in src_ws.iter_rows():
-                for cell in row:
-                    new_cell = dest_ws.cell(row=cell.row, column=cell.column, value=cell.value)
-                    if cell.has_style:
-                        try:
-                            new_cell.font        = _copy(cell.font)
-                            new_cell.border      = _copy(cell.border)
-                            new_cell.fill        = _copy(cell.fill)
-                            new_cell.number_format = cell.number_format
-                            new_cell.alignment   = _copy(cell.alignment)
-                        except Exception:
-                            pass
-        finally:
+            with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+                out_path = tmp.name
             try:
-                os.unlink(out_path)
-            except Exception:
-                pass
+                build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
+                src_wb = load_workbook(out_path)
+                src_ws = src_wb.active
 
-    if not combined_wb.sheetnames:
-        return jsonify({'erro': 'Nenhum dado para gerar.'}), 400
+                # Nome da aba: até 31 chars, sem chars inválidos do Excel
+                safe_name = re.sub(r'[/\\*?:\[\]]', '', cliente)[:31].strip()
+                dest_ws = combined_wb.create_sheet(
+                    title=safe_name or f'Cliente_{len(combined_wb.sheetnames)+1}'
+                )
 
-    buf = io.BytesIO()
-    combined_wb.save(buf)
-    buf.seek(0)
+                # Copiar dimensões de colunas e linhas
+                for col_letter, col_dim in src_ws.column_dimensions.items():
+                    dest_ws.column_dimensions[col_letter].width = col_dim.width
+                for row_idx, row_dim in src_ws.row_dimensions.items():
+                    dest_ws.row_dimensions[row_idx].height = row_dim.height
 
-    return send_file(
-        buf,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name='Relatorio_Consolidado_Altcom365.xlsx',
-    )
+                # Copiar células mescladas (protegido contra erros de range)
+                for merged in list(src_ws.merged_cells.ranges):
+                    try:
+                        dest_ws.merge_cells(str(merged))
+                    except Exception:
+                        pass
+
+                # Copiar células com valores e estilos
+                for row in src_ws.iter_rows():
+                    for cell in row:
+                        new_cell = dest_ws.cell(row=cell.row, column=cell.column, value=cell.value)
+                        if cell.has_style:
+                            try:
+                                new_cell.font          = _copy(cell.font)
+                                new_cell.border        = _copy(cell.border)
+                                new_cell.fill          = _copy(cell.fill)
+                                new_cell.number_format = cell.number_format
+                                new_cell.alignment     = _copy(cell.alignment)
+                            except Exception:
+                                pass
+            except Exception as cli_err:
+                logger.warning('consolidado: erro ao processar %s: %s', cliente, cli_err)
+                # Adiciona aba vazia com mensagem de erro — não para o processamento
+                try:
+                    err_name = (re.sub(r'[/\\*?:\[\]]', '', cliente)[:27].strip() + '_ERR')
+                    err_ws = combined_wb.create_sheet(title=err_name)
+                    err_ws.cell(row=1, column=1, value=f'Erro: {cli_err}')
+                except Exception:
+                    pass
+            finally:
+                try:
+                    os.unlink(out_path)
+                except Exception:
+                    pass
+
+        if not combined_wb.sheetnames:
+            return jsonify({'erro': 'Nenhum dado para gerar.'}), 400
+
+        buf = io.BytesIO()
+        combined_wb.save(buf)
+        buf.seek(0)
+
+        return send_file(
+            buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='Relatorio_Consolidado_Altcom365.xlsx',
+        )
+
+    except Exception as e:
+        logger.exception('download_relatorio_consolidado: erro inesperado')
+        return jsonify({'erro': f'Erro ao gerar consolidado: {str(e)}'}), 500
 
 
 def _job_sync_ids_diario():
@@ -1176,4 +1195,5 @@ except Exception as _sch_err:
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
+
 
