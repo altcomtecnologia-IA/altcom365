@@ -173,15 +173,38 @@ def calcular_alertas(df, versao_ref=None):
         lambda u: f"Preventiva -- uso {u:.1f}%" if (u is not None and u > 70) else ""
     )
 
-    # 2. Windows desatualizado
+    # 2. Windows desatualizado — só máquinas com CPU compatível com Win11
+    #    Critério Altcom: Intel i5 8ª gen+, i7 7ª gen+, i9 qualquer, AMD Ryzen qualquer
     def _win_old(so):
         s = str(so).lower()
         return any(x in s for x in
                    ['windows 10', 'windows 8', 'windows 7', 'windows xp'])
 
-    df['_alerta_windows'] = df['SISTEMA OPERACIONAL'].apply(
-        lambda so: "Upgrade para Win 11" if _win_old(so) else ""
-    )
+    def _cpu_qualifica_win11(proc_str):
+        """True se o CPU suporta Win11 pelos critérios Altcom: i5 8ª+, i7 7ª+, i9, Ryzen."""
+        try:
+            from engine_altcom365 import parse_cpu
+            familia, gen, _ = parse_cpu(str(proc_str) if proc_str else '')
+        except Exception:
+            return False
+        if familia.startswith('ryzen'):
+            return True
+        if familia == 'i9':
+            return True
+        if familia == 'i7' and gen >= 7:
+            return True
+        if familia == 'i5' and gen >= 8:
+            return True
+        return False
+
+    def _alerta_win(row):
+        so  = str(row.get('SISTEMA OPERACIONAL', ''))
+        proc = str(row.get('PROCESSADOR', ''))
+        if _win_old(so) and _cpu_qualifica_win11(proc):
+            return "Upgrade para Win 11"
+        return ""
+
+    df['_alerta_windows'] = df.apply(_alerta_win, axis=1)
 
     # 3. Sem contato > 20 dias (opcional)
     if 'DATA DE ATUALIZAÇÃO' in df.columns:
