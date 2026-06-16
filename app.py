@@ -1038,12 +1038,9 @@ def api_push_milvus():
 def download_relatorio_consolidado():
     """
     Gera um único arquivo Excel com todos os Relatórios Internos da sessão atual,
-    uma aba por cliente — download consolidado sem precisar abrir cliente por cliente.
+    uma aba por cliente (pandas ExcelWriter — robusto, sem cópia de cells).
     """
     try:
-        from openpyxl import load_workbook, Workbook
-        from copy import copy as _copy
-
         sess_data = _get_current_session()
         if sess_data is None:
             return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
@@ -1052,77 +1049,80 @@ def download_relatorio_consolidado():
         versao_ref = sess_data['versao_ref']
         clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
 
-        combined_wb = Workbook()
-        combined_wb.remove(combined_wb.active)  # remove aba padrão vazia
+        if not clientes:
+            return jsonify({'erro': 'Nenhum cliente encontrado na sessão.'}), 400
 
-        for cliente in clientes:
-            df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
-            if df_cli.empty:
-                continue
-            df_alertas = calcular_alertas(df_cli, versao_ref)
-            df_norm    = normalize_df(df_alertas)
-
-            with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-                out_path = tmp.name
-            try:
-                build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
-                src_wb = load_workbook(out_path)
-                src_ws = src_wb.active
-
-                # Nome da aba: até 31 chars, sem chars inválidos do Excel
-                safe_name = re.sub(r'[/\\*?:\[\]]', '', cliente)[:31].strip()
-                dest_ws = combined_wb.create_sheet(
-                    title=safe_name or f'Cliente_{len(combined_wb.sheetnames)+1}'
-                )
-
-                # Copiar dimensões de colunas e linhas
-                for col_letter, col_dim in src_ws.column_dimensions.items():
-                    dest_ws.column_dimensions[col_letter].width = col_dim.width
-                for row_idx, row_dim in src_ws.row_dimensions.items():
-                    dest_ws.row_dimensions[row_idx].height = row_dim.height
-
-                # Copiar células mescladas (protegido contra erros de range)
-                for merged in list(src_ws.merged_cells.ranges):
-                    try:
-                        dest_ws.merge_cells(str(merged))
-                    except Exception:
-                        pass
-
-                # Copiar células com valores e estilos
-                for row in src_ws.iter_rows():
-                    for cell in row:
-                        new_cell = dest_ws.cell(row=cell.row, column=cell.column, value=cell.value)
-                        if cell.has_style:
-                            try:
-                                new_cell.font          = _copy(cell.font)
-                                new_cell.border        = _copy(cell.border)
-                                new_cell.fill          = _copy(cell.fill)
-                                new_cell.number_format = cell.number_format
-                                new_cell.alignment     = _copy(cell.alignment)
-                            except Exception:
-                                pass
-            except Exception as cli_err:
-                logger.warning('consolidado: erro ao processar %s: %s', cliente, cli_err)
-                # Adiciona aba vazia com mensagem de erro — não para o processamento
-                try:
-                    err_name = (re.sub(r'[/\\*?:\[\]]', '', cliente)[:27].strip() + '_ERR')
-                    err_ws = combined_wb.create_sheet(title=err_name)
-                    err_ws.cell(row=1, column=1, value=f'Erro: {cli_err}')
-                except Exception:
-                    pass
-            finally:
-                try:
-                    os.unlink(out_path)
-                except Exception:
-                    pass
-
-        if not combined_wb.sheetnames:
-            return jsonify({'erro': 'Nenhum dado para gerar.'}), 400
+        # Mapear colunas de exibição (igual ao relatório interno)
+        COLUNAS_EXIBIR = {
+            'hostname':                    'Hostname',
+            'USUÁRIO LOGADO':              'Usuário',
+            'Versão do client':            'Versão Agente',
+            'Data de atualização':         'Última Atualização',
+            'ARMAZENAMENTO INTERNO TOTAL': 'HD Total (GB)',
+            'ARMAZENAMENTO INTERNO UTILIZADO': 'HD Usado (GB)',
+            'uso_pct':                     'HD Uso %',
+            'Sistema operacional':         'S.O.',
+            'Modelo do computador':        'Modelo',
+            '_alerta_versao':              'Alerta: Versão',
+            '_alerta_armazenamento':       'Alerta: Armazenamento',
+            '_alerta_windows':             'Alerta: Windows',
+            '_alerta_tempo_sem_uso':       'Alerta: Sem uso',
+        }
 
         buf = io.BytesIO()
-        combined_wb.save(buf)
-        buf.seek(0)
+        errors_por_cliente = []
 
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            sheets_criadas = 0
+            for cliente in clientes:
+                try:
+                    df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+                    if df_cli.empty:
+                        continue
+
+                    df_alertas = calcular_alertas(df_cli, versao_ref)
+                    df_norm    = normalize_df(df_alertas)
+
+                    # Filtrar apenas dispositivos com pelo menos 1 alerta
+                    if '_tem_alerta' in df_norm.columns:
+                        df_export = df_norm[df_norm['_tem_alerta'] == True].copy()
+                    else:
+                        df_export = df_norm.copy()
+
+                    # Selecionar e renomear colunas disponíveis
+                    cols_presentes = {k: v for k, v in COLUNAS_EXIBIR.items()
+                                      if k in df_export.columns}
+                    df_out = df_export[list(cols_presentes.keys())].rename(
+                        columns=cols_presentes
+                    )
+
+                    # Se não há coluna de versão, usar a primeira coluna disponível
+                    if df_out.empty:
+                        # Inclui todos mesmo sem alerta (cliente sem problemas)
+                        df_out = df_export[[c for c in list(cols_presentes.keys())
+                                            if c in df_export.columns]]
+                        df_out = df_out.rename(columns=cols_presentes)
+
+                    # Nome da aba: max 31 chars, remover chars inválidos
+                    sheet_name = ''.join(c for c in cliente
+                                         if c not in r'/\*?:[]')[:31].strip()
+                    if not sheet_name:
+                        sheet_name = f'Cliente_{sheets_criadas+1}'
+
+                    df_out.to_excel(writer, sheet_name=sheet_name, index=False)
+                    sheets_criadas += 1
+
+                except Exception as cli_err:
+                    logger.warning('consolidado: erro cliente %s: %s', cliente, cli_err)
+                    errors_por_cliente.append(f'{cliente}: {cli_err}')
+
+        if sheets_criadas == 0:
+            err_msg = 'Nenhuma aba gerada.'
+            if errors_por_cliente:
+                err_msg += ' Erros: ' + ' | '.join(errors_por_cliente[:3])
+            return jsonify({'erro': err_msg}), 400
+
+        buf.seek(0)
         return send_file(
             buf,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -1132,7 +1132,7 @@ def download_relatorio_consolidado():
 
     except Exception as e:
         logger.exception('download_relatorio_consolidado: erro inesperado')
-        return jsonify({'erro': f'Erro ao gerar consolidado: {str(e)}'}), 500
+        return jsonify({'erro': f'Erro inesperado: {str(e)}'}), 500
 
 
 def _job_sync_ids_diario():
