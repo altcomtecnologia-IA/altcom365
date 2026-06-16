@@ -888,114 +888,74 @@ def sync_clientes():
     return jsonify({'ok': True, 'clientes_sincronizados': atualizados})
 
 
-# Dicionário em memória para rastrear jobs de sync_ids
-_sync_jobs:       dict = {}
-_current_job_id:  str  = ''     # último job iniciado (para polling sem job_id)
-
-
 @app.route('/sync-ids', methods=['POST'])
 def sync_ids():
     """
-    Sincroniza a tabela dispositivos_map paginando POST /api/dispositivos/listagem.
-    Rate limit: 1 req/min — job roda em background thread.
-    Retorna job_id para acompanhar progresso via /sync-ids/status?job_id=X.
+    Sincroniza a tabela dispositivos_map via POST /api/dispositivos/listagem.
+    Uma única chamada com total_registros=1000 traz todo o parque (~470 dispositivos).
+    Executa de forma síncrona — sem background thread, sem problema de multi-worker.
     """
-    import threading
+    import requests as req
 
     mtoken = os.environ.get('MILVUS_API_TOKEN')
     if not mtoken:
-        return jsonify({'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
+        return jsonify({'ok': False, 'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
 
-    global _current_job_id
-    job_id = str(uuid.uuid4())[:8]
-    _sync_jobs[job_id] = {'status': 'running', 'pagina': 0, 'total': 0, 'mapeados': 0}
-    _current_job_id = job_id
+    try:
+        resp = req.post(
+            'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
+            json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
+            headers={'Authorization': mtoken, 'Content-Type': 'application/json'},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)}), 500
 
-    def _run(jid, tok):
-        import requests as req
-        import time as _t
-        with app.app_context():
-            try:
-                pagina   = 1
-                mapeados = 0
-                agora    = datetime.utcnow()
+    lista    = data.get('lista', [])
+    agora    = datetime.utcnow()
+    mapeados = 0
 
-                while True:
-                    _sync_jobs[jid]['pagina'] = pagina
-                    try:
-                        resp = req.post(
-                            'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
-                            json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
-                            headers={'Authorization': tok, 'Content-Type': 'application/json'},
-                            timeout=60,
-                        )
-                        resp.raise_for_status()
-                        data = resp.json()
-                    except Exception as e:
-                        _sync_jobs[jid]['status'] = f'erro_pg1: {e}'
-                        return
+    for item in lista:
+        host = (item.get('hostname') or '').strip()
+        nome = (item.get('nome_fantasia') or '').strip()
+        if not host or not nome:
+            continue
+        did   = item.get('id') or item.get('dispositivo_id')
+        ativo = item.get('is_ativo', True)
+        entry = DispositivosMap.query.filter_by(hostname=host, nome_fantasia=nome).first()
+        if entry:
+            entry.milvus_dispositivo_id = did
+            entry.is_ativo    = ativo
+            entry.ultima_sync = agora
+        else:
+            db.session.add(DispositivosMap(
+                hostname=host, nome_fantasia=nome,
+                milvus_dispositivo_id=did,
+                is_ativo=ativo, ultima_sync=agora,
+            ))
+        mapeados += 1
 
-                    meta    = data.get('meta', {}).get('paginate', {})
-                    last_pg = int(meta.get('last_page', 1))
-                    total   = int(meta.get('total', 0))
-                    lista   = data.get('lista', [])
-                    _sync_jobs[jid]['total'] = total
+    db.session.commit()
+    logger.info('sync_ids: %d dispositivos mapeados', mapeados)
 
-                    for item in lista:
-                        host = (item.get('hostname') or '').strip()
-                        nome = (item.get('nome_fantasia') or '').strip()
-                        if not host or not nome:
-                            continue
-                        did   = item.get('id') or item.get('dispositivo_id')
-                        ativo = item.get('is_ativo', True)
-                        entry = DispositivosMap.query.filter_by(
-                            hostname=host, nome_fantasia=nome
-                        ).first()
-                        if entry:
-                            entry.milvus_dispositivo_id = did
-                            entry.is_ativo    = ativo
-                            entry.ultima_sync = agora
-                        else:
-                            db.session.add(DispositivosMap(
-                                hostname=host, nome_fantasia=nome,
-                                milvus_dispositivo_id=did,
-                                is_ativo=ativo, ultima_sync=agora,
-                            ))
-                        mapeados += 1
-
-                    db.session.commit()
-                    _sync_jobs[jid]['mapeados'] = mapeados
-
-
-                _sync_jobs[jid]['status'] = 'done'
-                logger.info('sync_ids: %d dispositivos mapeados', mapeados)
-
-            except Exception as e:
-                _sync_jobs[jid]['status'] = f'erro: {e}'
-                logger.exception('sync_ids: erro inesperado')
-
-    threading.Thread(target=_run, args=(job_id, mtoken), daemon=True).start()
-    return jsonify({'ok': True, 'job_id': job_id, 'msg': 'Sincronizacao iniciada em background.'})
+    return jsonify({
+        'ok':            True,
+        'total_mapeados': mapeados,
+        'ultima_sync':   agora.isoformat(),
+    })
 
 
 @app.route('/sync-ids/status', methods=['GET'])
 def sync_ids_status():
-    """Retorna o progresso do job de sync_ids (ou status geral do banco)."""
-    job_id = request.args.get('job_id') or _current_job_id
-    if job_id and job_id in _sync_jobs:
-        job = dict(_sync_jobs[job_id])
-        # Enriquecer com totais do banco quando concluído
-        if job.get('status') == 'done':
-            job['total_mapeados'] = DispositivosMap.query.count()
-            ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
-            job['ultima_sync'] = ultima.isoformat() if ultima else None
-        return jsonify(job)
-    n = DispositivosMap.query.count()
+    """Retorna contagem atual de IDs mapeados no banco."""
+    n     = DispositivosMap.query.count()
     ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
     return jsonify({
-        'status':        'idle',
+        'status':         'idle',
         'total_mapeados': n,
-        'ultima_sync':   ultima.isoformat() if ultima else None,
+        'ultima_sync':    ultima.isoformat() if ultima else None,
     })
 
 
@@ -1074,6 +1034,88 @@ def api_push_milvus():
 
 
 # ── APScheduler — job diário de sync de IDs ──────────────────────────────────
+@app.route('/download/relatorio-consolidado', methods=['GET'])
+def download_relatorio_consolidado():
+    """
+    Gera um único arquivo Excel com todos os Relatórios Internos da sessão atual,
+    uma aba por cliente — download consolidado sem precisar abrir cliente por cliente.
+    """
+    from openpyxl import load_workbook, Workbook
+    from copy import copy as _copy
+
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+    clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
+
+    combined_wb = Workbook()
+    combined_wb.remove(combined_wb.active)  # remove aba padrão vazia
+
+    for cliente in clientes:
+        df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+        if df_cli.empty:
+            continue
+        df_alertas = calcular_alertas(df_cli, versao_ref)
+        df_norm    = normalize_df(df_alertas)
+
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
+            src_wb = load_workbook(out_path)
+            src_ws = src_wb.active
+
+            # Nome da aba: até 31 chars, sem chars inválidos do Excel
+            sheet_name = re.sub(r'[\\/*?:\[\]]', '', cliente)[:31].strip()
+            dest_ws = combined_wb.create_sheet(title=sheet_name or f'Cliente_{len(combined_wb.sheetnames)+1}')
+
+            # Copiar dimensões de colunas e linhas
+            for col_letter, col_dim in src_ws.column_dimensions.items():
+                dest_ws.column_dimensions[col_letter].width = col_dim.width
+            for row_idx, row_dim in src_ws.row_dimensions.items():
+                dest_ws.row_dimensions[row_idx].height = row_dim.height
+
+            # Copiar células mescladas
+            for merged in list(src_ws.merged_cells.ranges):
+                dest_ws.merge_cells(str(merged))
+
+            # Copiar células com valores e estilos
+            for row in src_ws.iter_rows():
+                for cell in row:
+                    new_cell = dest_ws.cell(row=cell.row, column=cell.column, value=cell.value)
+                    if cell.has_style:
+                        try:
+                            new_cell.font        = _copy(cell.font)
+                            new_cell.border      = _copy(cell.border)
+                            new_cell.fill        = _copy(cell.fill)
+                            new_cell.number_format = cell.number_format
+                            new_cell.alignment   = _copy(cell.alignment)
+                        except Exception:
+                            pass
+        finally:
+            try:
+                os.unlink(out_path)
+            except Exception:
+                pass
+
+    if not combined_wb.sheetnames:
+        return jsonify({'erro': 'Nenhum dado para gerar.'}), 400
+
+    buf = io.BytesIO()
+    combined_wb.save(buf)
+    buf.seek(0)
+
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='Relatorio_Consolidado_Altcom365.xlsx',
+    )
+
+
 def _job_sync_ids_diario():
     """Executado às 02:00 diariamente para manter DispositivosMap atualizado."""
     import requests as _req
@@ -1117,7 +1159,8 @@ def _job_sync_ids_diario():
                             is_ativo=ativo, ultima_sync=agora,
                         ))
                 _db.session.commit()
-            logger.info('job_sync_ids: concluído — página %d/%d', pagina, last_pg)
+                break  # total_registros=1000 traz tudo em 1 chamada — sem paginação
+            logger.info('job_sync_ids: concluído — %d dispositivos', len(lista))
         except Exception:
             logger.exception('job_sync_ids: erro durante execução diária')
 
@@ -1133,3 +1176,4 @@ except Exception as _sch_err:
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
+
