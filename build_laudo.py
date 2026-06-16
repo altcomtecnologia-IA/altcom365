@@ -475,13 +475,16 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
         inline = df_out.apply(_inline_alerts, axis=1)
         df_out = pd.concat([df_out, inline], axis=1)
 
-    # -- Filtra apenas dispositivos com alerta ---------------------------------
-    alert_df = df_out[df_out['_tem_alerta']].copy()
+    # -- Filtra dispositivos com alerta OU classificados como CRÍTICO ---------
+    # (CRÍTICO sem alerta pode ocorrer se CPU antigo + Win10 não qualifica + armazenamento ok)
+    _is_critico = df_out['Classificação'] == 'CRÍTICO'
+    alert_df = df_out[df_out['_tem_alerta'] | _is_critico].copy()
 
     # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
                'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Data Atualização', 'Versão Agente',
+               'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
                'Alerta Sem Contato', 'Alerta Agente Milvus']
     NCOLS = len(HEADERS)
@@ -551,10 +554,23 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             dat(ws, r, ci, v, z=z, ha=ha)
             ci += 1
 
-        # Colunas de alerta (13-16) — todos os dispositivos, incluindo CRÍTICO
+        # Col 13: Crítica/Troca — identifica máquinas laudadas para substituição
+        _eh_critico = classif_base == 'CRÍTICO'
+        if _eh_critico:
+            c = ws.cell(row=r, column=ci, value="Laudado para Troca")
+            bg_t, fc_t = ALERT_COLORS['troca']
+            c.fill      = PatternFill("solid", fgColor=bg_t)
+            c.font      = Font(name='Arial', size=8, bold=True, color=fc_t)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border    = brd()
+        else:
+            dat(ws, r, ci, "", z=z, ha='center')
+        ci += 1
+
+        # Colunas de alerta (14-17) — Alerta Windows suprimido para CRÍTICO
         alert_vals = [
             (str(row.get('_alerta_armazenamento', '')), 'armazenamento'),
-            (str(row.get('_alerta_windows', '')),       'windows'),
+            ("" if _eh_critico else str(row.get('_alerta_windows', '')), 'windows'),
             (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
             (str(row.get('_alerta_milvus', '')),        'milvus'),
         ]
@@ -572,7 +588,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             ci += 1
 
     # -- Larguras --------------------------------------------------------------
-    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 22, 18, 28, 26]
+    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
