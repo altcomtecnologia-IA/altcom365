@@ -246,6 +246,10 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
         <span id="total-geral-label"></span>
         <span class="versao-ref" id="versao-ref-label" style="display:none"></span>
       </div>
+      <button class="btn-dl btn-dl-interno" id="btn-consolidado"
+              onclick="baixarConsolidado()" style="display:none;padding:8px 14px;font-size:12px">
+        ⬇ Todos Rel. Internos
+      </button>
       <a href="/" class="btn-back">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -651,6 +655,8 @@ async function init(){
       vEl.style.display='';
     }
     document.getElementById('header-meta').style.display='';
+    const btnCons = document.getElementById('btn-consolidado');
+    if (btnCons) btnCons.style.display = '';
 
     // Build tabs
     const tabsBar  = document.getElementById('tabs-bar');
@@ -758,107 +764,103 @@ async function solicitarPushMilvus(nomeCliente){
 }
 
 // ── Sincronização de IDs Milvus ──────────────────────────────────────────────
-let _syncPollTimer = null;
-let _syncJobId     = null;   // job_id do último sync iniciado nesta sessão
 
 function _fmtData(dtStr) {
   if (!dtStr) return '';
   try {
-    const d = new Date(dtStr);
+    const d = new Date(dtStr + 'Z');   // força UTC
     return ' · ' + d.toLocaleDateString('pt-BR') +
            ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   } catch(_) { return ''; }
 }
 
-function atualizarBarraSync(data) {
+function _setBarraSync(cls, dotCls, html, btnTxt, disabled) {
   const bar = document.getElementById('sync-bar');
   const dot = document.getElementById('sync-dot');
   const txt = document.getElementById('sync-status-text');
   const btn = document.getElementById('btn-sync-ids');
   if (!bar) return;
-
-  const st = data.status || 'idle';
-
-  if (st === 'running') {
-    bar.className  = 'rodando';
-    dot.className  = 'sync-dot rodando';
-    const pg  = data.pagina   || 0;
-    const map = data.mapeados || 0;
-    txt.innerHTML  = `<strong>Sincronizando…</strong> página ${pg} · ${map} mapeados`;
-    btn.disabled   = true;
-    btn.textContent = '⏳ Sincronizando…';
-    if (!_syncPollTimer) _syncPollTimer = setInterval(pollSyncStatus, 3000);
-
-  } else if (st === 'done') {
-    bar.className  = 'ok';
-    dot.className  = 'sync-dot ok';
-    const n = data.total_mapeados || data.mapeados || 0;
-    txt.innerHTML  = `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`;
-    btn.disabled   = false;
-    btn.textContent = '🔄 Re-sincronizar';
-    clearInterval(_syncPollTimer); _syncPollTimer = null;
-
-  } else if (st.startsWith('erro')) {
-    bar.className  = 'alerta';
-    dot.className  = 'sync-dot erro';
-    txt.textContent = '❌ Erro: ' + st;
-    btn.disabled   = false;
-    btn.textContent = '🔄 Tentar novamente';
-    clearInterval(_syncPollTimer); _syncPollTimer = null;
-
-  } else {
-    // idle — mostra total do banco se já tiver algum
-    const n = data.total_mapeados || 0;
-    if (n > 0) {
-      bar.className  = 'ok';
-      dot.className  = 'sync-dot ok';
-      txt.innerHTML  = `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`;
-      btn.textContent = '🔄 Re-sincronizar';
-    } else {
-      bar.className  = 'alerta';
-      dot.className  = 'sync-dot alerta';
-      txt.textContent = 'IDs não sincronizados — execute sincronização para habilitar o push';
-      btn.textContent = '🔄 Sincronizar IDs Milvus';
-    }
-    btn.disabled = false;
-    clearInterval(_syncPollTimer); _syncPollTimer = null;
-  }
+  bar.className  = cls;
+  dot.className  = 'sync-dot ' + dotCls;
+  txt.innerHTML  = html;
+  btn.textContent = btnTxt;
+  btn.disabled   = disabled;
 }
 
-async function pollSyncStatus() {
+async function carregarStatusSync() {
   try {
-    const url  = '/sync-ids/status' + (_syncJobId ? '?job_id=' + _syncJobId : '');
-    const data = await (await fetch(url)).json();
-    atualizarBarraSync(data);
+    const data = await (await fetch('/sync-ids/status')).json();
+    const n    = data.total_mapeados || 0;
+    if (n > 0) {
+      _setBarraSync('ok', 'ok',
+        `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`,
+        '🔄 Re-sincronizar', false);
+    } else {
+      _setBarraSync('alerta', 'alerta',
+        'IDs não sincronizados — execute sincronização para habilitar o push',
+        '🔄 Sincronizar IDs Milvus', false);
+    }
   } catch(_) {}
 }
 
 async function iniciarSyncIds() {
-  const btn = document.getElementById('btn-sync-ids');
-  btn.disabled    = true;
-  btn.textContent = '⏳ Iniciando…';
+  _setBarraSync('rodando', 'rodando',
+    '<strong>Sincronizando…</strong> buscando dispositivos da Milvus',
+    '⏳ Sincronizando…', true);
   try {
-    const data = await (await fetch('/sync-ids', {method:'POST'})).json();
-    if (!data.ok && !data.job_id) {
-      alert('Erro ao iniciar: ' + (data.msg || data.erro || '?'));
-      btn.disabled    = false;
-      btn.textContent = '🔄 Sincronizar IDs Milvus';
-      return;
+    const resp = await fetch('/sync-ids', {method:'POST'});
+    const data = await resp.json();
+    if (data.ok) {
+      const n = data.total_mapeados || 0;
+      _setBarraSync('ok', 'ok',
+        `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`,
+        '🔄 Re-sincronizar', false);
+    } else {
+      _setBarraSync('alerta', 'erro',
+        '❌ Erro: ' + (data.erro || 'falha desconhecida'),
+        '🔄 Tentar novamente', false);
     }
-    _syncJobId = data.job_id || null;
-    if (_syncPollTimer) clearInterval(_syncPollTimer);
-    _syncPollTimer = setInterval(pollSyncStatus, 3000);
-    await pollSyncStatus();
   } catch(e) {
-    alert('Erro de rede ao iniciar sincronização.');
-    btn.disabled    = false;
-    btn.textContent = '🔄 Sincronizar IDs Milvus';
+    _setBarraSync('alerta', 'erro',
+      '❌ Erro de rede. Tente novamente.',
+      '🔄 Tentar novamente', false);
   }
 }
 
-// Verificar status ao carregar a página (usa _current_job_id do servidor)
-document.addEventListener('DOMContentLoaded', () => setTimeout(pollSyncStatus, 1500));
+// ── Download Consolidado ──────────────────────────────────────────────────────
+async function baixarConsolidado() {
+  const btn = document.getElementById('btn-consolidado');
+  const orig = btn.textContent;
+  btn.disabled    = true;
+  btn.textContent = '⏳ Gerando…';
+  try {
+    const resp = await fetch('/download/relatorio-consolidado');
+    if (!resp.ok) {
+      const err = await resp.json().catch(()=>({erro:'Erro desconhecido'}));
+      alert('Erro: ' + (err.erro || resp.statusText));
+      return;
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'Relatorio_Consolidado_Altcom365.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Erro ao baixar: ' + e.message);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = orig;
+  }
+}
+
+// Carregar status ao abrir a página
+document.addEventListener('DOMContentLoaded', () => setTimeout(carregarStatusSync, 1200));
 
 </script>
 </body>
 </html>
+
