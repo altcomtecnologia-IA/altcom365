@@ -228,12 +228,13 @@ def classify(row) -> pd.Series:
             'Preços':                PRECO_SUBST,
         })
 
-    # ── Requisito EXCELENTE: 16GB + SSD>=480 → se não atingir, rebaixa tier ─
-    if tier == 4 and (ram < 16 or storage < 480):
+    # ── Requisito EXCELENTE: 16GB + SSD>=460 → se não atingir, rebaixa tier ─
+    # 460 GB acomoda SSDs de 480 GB/500 GB que reportam ~475 GB formatados.
+    if tier == 4 and (ram < 16 or storage < 460):
         tier = 3   # rebaixa para ÓTIMO (permanente — não promove de volta)
 
-    # ── Promoção ÓTIMO→EXCELENTE por RAM: só se tier BASE era 3 ─────────────
-    if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16:
+    # ── Promoção ÓTIMO→EXCELENTE por RAM: só se tier BASE era 3 e SSD≥460 ──
+    if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16 and storage >= 460:
         tier = 4
 
     # ── Classificação base final (tier não muda mais após aqui) ──────────────
