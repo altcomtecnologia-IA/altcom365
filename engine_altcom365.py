@@ -120,9 +120,20 @@ def parse_cpu(proc: str) -> tuple:
     if rm:
         return f'ryzen{rm.group(1)}', int(rm.group(2)), ''
 
-    # Intel N-series (low-power)
+    # Intel N-series (low-power): "N100", "N4020" etc.
     if re.search(r'i3-n\d+|core.*\bn\d{3,4}\b', p):
         return 'n-series', 0, ''
+
+    # Intel Core novo naming (sem "i"): "Core 5 210H", "Core Ultra 7 150H", "Core(TM) 5 210H"
+    # Introduzido na 12ª/13ª geração em diante — sempre modernos e compatíveis com Win11.
+    # O (?:\([^)]+\))? tolera sufixos como (TM) ou (R) após "core".
+    cm = re.search(r'core(?:\([^)]+\))?\s+(ultra\s+)?([3579])\s+(\d{2,4})([a-z]*)', p)
+    if cm:
+        ultra   = bool(cm.group(1))           # True se "Ultra"
+        num     = cm.group(2)                 # '3', '5', '7', '9'
+        suffix  = cm.group(4)                 # 'h', 'u', 'p', etc.
+        familia = f'core-ultra-{num}' if ultra else f'core{num}'
+        return familia, 14, suffix            # gen=14 como piso seguro (sempre moderno)
 
     # Gen tag explícita: "11th Gen ... i5-1135G7"
     gm = re.search(r'(\d+)(?:th|nd|rd|st)\s+gen.*?i([3579])-(\d{3,5})([a-z]*)', p)
@@ -151,6 +162,10 @@ def base_tier(dev: str, proc: str) -> int:
 
     # Intel N-series = CRÍTICO
     if familia == 'n-series': return 0
+
+    # Intel Core novo naming (Core 5/7/3/9, Core Ultra) — sempre BOM ou ÓTIMO
+    if familia.startswith('core'):
+        return 4 if 'ultra' in familia else 3
 
     if familia == 'unknown' or gen == 0: return 0
 
