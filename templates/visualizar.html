@@ -247,6 +247,10 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
 #pf-header{display:flex;align-items:center;justify-content:space-between;
   padding:10px 16px;border-bottom:1px solid var(--navy3)}
 #pf-title{font-size:13px;font-weight:700;color:var(--cyan)}
+#pf-export{background:rgba(0,180,100,0.15);border:1px solid rgba(0,180,100,0.4);
+  color:#4ecca3;font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;
+  cursor:pointer;transition:background .2s;white-space:nowrap}
+#pf-export:hover{background:rgba(0,180,100,0.3)}
 #pf-close{background:transparent;border:none;color:var(--gray4);
   font-size:18px;cursor:pointer;line-height:1;padding:0 4px}
 #pf-close:hover{color:var(--white)}
@@ -259,6 +263,7 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
 .pf-table tr:hover td{background:rgba(255,255,255,.03)}
 .pf-empty{padding:24px;text-align:center;color:var(--gray4);font-size:12px}
 </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -331,7 +336,10 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
       <div id="painel-filtrado">
         <div id="pf-header">
           <span id="pf-title">Filtro</span>
-          <button id="pf-close" onclick="fecharFiltroPainel()" title="Fechar">✕</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button id="pf-export" onclick="exportarFiltroXLSX()" title="Baixar XLSX com os dados filtrados">📥 Exportar XLSX</button>
+            <button id="pf-close" onclick="fecharFiltroPainel()" title="Fechar">✕</button>
+          </div>
         </div>
         <div id="pf-body"><div class="pf-empty">Carregando…</div></div>
       </div>
@@ -762,11 +770,11 @@ async function init(){
 let _filtroAtivo = null;
 
 const FILTRO_DEFS = [
-  {tipo:'critico',        icon:'⚠️', lbl:'Laudados Troca', bg:'#6B0000', fg:'#FF6B6B'},
-  {tipo:'armazenamento',  icon:'💾', lbl:'Armazenamento',  bg:'#5D3A00', fg:'#FFC000'},
-  {tipo:'windows',        icon:'🪟', lbl:'Windows',        bg:'#003D5C', fg:'#00B0F0'},
-  {tipo:'sem_contato',    icon:'📡', lbl:'Sem contato',    bg:'#3D0000', fg:'#FF6B6B'},
-  {tipo:'milvus',         icon:'🔄', lbl:'Milvus',         bg:'#0D2E4A', fg:'#56CCF2'},
+  {tipo:'critico',        icon:'⚠️', lbl:'Laudados Troca',      bg:'#6B0000', fg:'#FF6B6B'},
+  {tipo:'armazenamento',  icon:'💾', lbl:'Alerta Armaz.',        bg:'#5D3A00', fg:'#FFC000'},
+  {tipo:'windows',        icon:'🪟', lbl:'Upgrade S.O 10→11',   bg:'#003D5C', fg:'#00B0F0'},
+  {tipo:'sem_contato',    icon:'📡', lbl:'Desconectadas',        bg:'#3D0000', fg:'#FF6B6B'},
+  {tipo:'milvus',         icon:'🔄', lbl:'Milvus desatualizado', bg:'#0D2E4A', fg:'#56CCF2'},
 ];
 
 function _contarFiltro(clientes, tipo){
@@ -859,6 +867,59 @@ function ativarFiltro(tipo, label){
 
   document.getElementById('pf-title').textContent = `${label} — ${linhas.length} dispositivo(s)`;
   document.getElementById('painel-filtrado').classList.add('aberto');
+}
+
+function exportarFiltroXLSX(){
+  if (!_filtroAtivo){ alert('Nenhum filtro ativo.'); return; }
+  if (typeof XLSX === 'undefined'){ alert('SheetJS não carregado.'); return; }
+
+  const def   = FILTRO_DEFS.find(d => d.tipo === _filtroAtivo);
+  const tipo  = _filtroAtivo;
+  const label = def ? def.lbl : tipo;
+
+  // Coletar linhas filtradas (mesma lógica de ativarFiltro)
+  const rows = [];
+  _allClientes.forEach(cli => {
+    cli.dispositivos.forEach(d => {
+      let match = (tipo === 'critico')
+        ? d.classificacao === 'CRÍTICO'
+        : (d.alertas && d.alertas.some(a => a.tipo === tipo));
+      if (!match) return;
+
+      const alertaMsg = (tipo === 'critico')
+        ? 'Laudado para Troca'
+        : ((d.alertas || []).find(a => a.tipo === tipo) || {}).msg || '';
+
+      rows.push({
+        'Dispositivo':    d.nome           || '',
+        'Cliente':        cli.nome         || '',
+        'Classificação':  d.classificacao  || '',
+        'S.O.':           d.so             || '',
+        'Último Contato': d.ultimo_contato || '',
+        'Alerta':         alertaMsg,
+      });
+    });
+  });
+
+  if (rows.length === 0){ alert('Nenhum dispositivo encontrado.'); return; }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Larguras de coluna (community edition suporta !cols)
+  ws['!cols'] = [{wch:30},{wch:26},{wch:14},{wch:32},{wch:20},{wch:50}];
+
+  // Linha de cabeçalho em maiúsculas para destaque
+  const hdr = Object.keys(rows[0]);
+  hdr.forEach((h, i) => {
+    const ref = XLSX.utils.encode_cell({r:0, c:i});
+    if (ws[ref]) ws[ref].v = h.toUpperCase();
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, label.slice(0,31));
+
+  const hoje = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Altcom365_${label.replace(/[^a-zA-Z0-9]/g,'_')}_${hoje}.xlsx`);
 }
 
 function fecharFiltroPainel(){
