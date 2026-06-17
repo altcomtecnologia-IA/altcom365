@@ -181,7 +181,8 @@ def calcular_alertas(df, versao_ref=None):
                    ['windows 10', 'windows 8', 'windows 7', 'windows xp'])
 
     def _cpu_qualifica_win11(proc_str):
-        """True se o CPU suporta Win11 pelos critérios Altcom: i5 8ª+, i7 7ª+, i9, Ryzen."""
+        """True se o CPU suporta Win11 pelos critérios Altcom: i5 8ª+, i7 7ª+, i9, Ryzen,
+        e novo naming Intel Core 5/7/3/9 e Core Ultra (12ª gen em diante)."""
         try:
             from engine_altcom365 import parse_cpu
             familia, gen, _ = parse_cpu(str(proc_str) if proc_str else '')
@@ -194,6 +195,9 @@ def calcular_alertas(df, versao_ref=None):
         if familia == 'i7' and gen >= 7:
             return True
         if familia == 'i5' and gen >= 8:
+            return True
+        # Novo naming Intel (sem "i"): Core 5/7/3/9 e Core Ultra — sempre modernos
+        if familia.startswith('core'):
             return True
         return False
 
