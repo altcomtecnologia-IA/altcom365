@@ -8,8 +8,6 @@ V11: PostgreSQL + SQLAlchemy + Flask-Migrate + APScheduler
 import os, sys, io, uuid, pickle, zipfile, tempfile, logging
 from datetime import datetime, timedelta
 from flask import Flask, request, send_file, jsonify, render_template, session
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 
 sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
@@ -17,11 +15,8 @@ from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
                                 normalize_df, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
-from models import db, ClientesMap, DispositivosMap, LaudosSnapshots
 import pandas as pd
-import milvus_api
 import threading
-from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +25,8 @@ app.secret_key          = os.environ.get('SECRET_KEY', 'altcom365-v2-secret-key'
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
 
 # ── Banco de dados ─────────────────────────────────────────────────────────────
-_db_url = os.environ.get('DATABASE_URL', '')
 # Render entrega 'postgres://' mas SQLAlchemy 1.4+ exige 'postgresql://'
-if _db_url.startswith('postgres://'):
-    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
-app.config['SQLALCHEMY_DATABASE_URI']    = _db_url or 'sqlite:///altcom365_dev.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db.init_app(app)
-migrate = Migrate(app, db)
 
 ALLOWED_EXT = {'.xlsx', '.xls'}
 SESS_DIR    = tempfile.gettempdir()
@@ -342,7 +330,6 @@ def baixar_relatorios_internos():
         return jsonify({'erro': f'Erro ao gerar relatórios internos: {str(e)}'}), 500
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # PHASE 2 — VISUALIZAÇÃO EM TELA
 # ══════════════════════════════════════════════════════════════════════════════
@@ -418,29 +405,6 @@ def api_dados_visualizacao():
             'resumo':       resumo,
             'dispositivos': dispositivos,
         })
-
-        # Buffer snapshot para salvar no banco
-        r = resumo.get('resumo', [])
-        snaps_buf.append(LaudosSnapshots(
-            nome_fantasia      = cliente,
-            data_processamento = datetime.utcnow(),
-            total_dispositivos = resumo.get('total', 0),
-            qtd_critico        = next((x['qtd'] for x in r if x['label'] == 'CRÍTICO'),       0),
-            qtd_satisfatorio   = next((x['qtd'] for x in r if x['label'] == 'SATISFATÓRIO'),  0),
-            qtd_bom            = next((x['qtd'] for x in r if x['label'] == 'BOM'),           0),
-            qtd_otimo          = next((x['qtd'] for x in r if x['label'] == 'ÓTIMO'),         0),
-            qtd_excelente      = next((x['qtd'] for x in r if x['label'] == 'EXCELENTE'),     0),
-            qtd_alertas        = resumo.get('alertas', {}),
-        ))
-
-    # Salva todos os snapshots de uma vez
-    try:
-        for snap in snaps_buf:
-            db.session.add(snap)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.warning(f'Snapshots não salvos: {e}')
 
     return jsonify({
         'clientes':    resultado,
@@ -537,7 +501,6 @@ def baixar_relatorio_unico():
                          download_name=f'Relatorio_Interno_{safe}.xlsx')
     except Exception as e:
         return jsonify({'erro': f'Erro ao gerar relatório: {str(e)}'}), 500
-
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -825,7 +788,6 @@ def sync_status():
     def _horas(dt):
         if not dt:
             return None
-        diff = datetime.utcnow() - dt
         return round(diff.total_seconds() / 3600, 1)
 
     return jsonify({
@@ -859,7 +821,6 @@ def sync_clientes():
         return jsonify({'erro': f'Falha ao buscar clientes: {exc}'}), 500
 
     lista = data if isinstance(data, list) else data.get('lista', data.get('data', []))
-    agora = datetime.utcnow()
     atualizados = 0
 
     for item in lista:
@@ -888,152 +849,6 @@ def sync_clientes():
     return jsonify({'ok': True, 'clientes_sincronizados': atualizados})
 
 
-@app.route('/sync-ids', methods=['POST'])
-def sync_ids():
-    """
-    Sincroniza a tabela dispositivos_map via POST /api/dispositivos/listagem.
-    Uma única chamada com total_registros=1000 traz todo o parque (~470 dispositivos).
-    Executa de forma síncrona — sem background thread, sem problema de multi-worker.
-    """
-    import requests as req
-
-    mtoken = os.environ.get('MILVUS_API_TOKEN')
-    if not mtoken:
-        return jsonify({'ok': False, 'erro': 'MILVUS_API_TOKEN nao configurado.'}), 400
-
-    try:
-        resp = req.post(
-            'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
-            json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
-            headers={'Authorization': mtoken, 'Content-Type': 'application/json'},
-            timeout=60,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        return jsonify({'ok': False, 'erro': str(e)}), 500
-
-    lista    = data.get('lista', [])
-    agora    = datetime.utcnow()
-    mapeados = 0
-
-    for item in lista:
-        host = (item.get('hostname') or '').strip()
-        nome = (item.get('nome_fantasia') or '').strip()
-        if not host or not nome:
-            continue
-        did   = item.get('id') or item.get('dispositivo_id')
-        ativo = item.get('is_ativo', True)
-        entry = DispositivosMap.query.filter_by(hostname=host, nome_fantasia=nome).first()
-        if entry:
-            entry.milvus_dispositivo_id = did
-            entry.is_ativo    = ativo
-            entry.ultima_sync = agora
-        else:
-            db.session.add(DispositivosMap(
-                hostname=host, nome_fantasia=nome,
-                milvus_dispositivo_id=did,
-                is_ativo=ativo, ultima_sync=agora,
-            ))
-        mapeados += 1
-
-    db.session.commit()
-    logger.info('sync_ids: %d dispositivos mapeados', mapeados)
-
-    return jsonify({
-        'ok':            True,
-        'total_mapeados': mapeados,
-        'ultima_sync':   agora.isoformat(),
-    })
-
-
-@app.route('/sync-ids/status', methods=['GET'])
-def sync_ids_status():
-    """Retorna contagem atual de IDs mapeados no banco."""
-    n     = DispositivosMap.query.count()
-    ultima = db.session.query(db.func.max(DispositivosMap.ultima_sync)).scalar()
-    return jsonify({
-        'status':         'idle',
-        'total_mapeados': n,
-        'ultima_sync':    ultima.isoformat() if ultima else None,
-    })
-
-
-@app.route('/api/push-milvus', methods=['POST'])
-def api_push_milvus():
-    """
-    Phase 3 — Dispara push de atualização do agente Milvus para os dispositivos
-    desatualizados (versão != versao_ref) de um cliente específico.
-
-    Body JSON: {"cliente": "Nome Fantasia Do Cliente"}
-    """
-    data_req  = request.get_json(silent=True) or {}
-    nome_cli  = (data_req.get('cliente') or '').strip()
-
-    if not nome_cli:
-        return jsonify({'ok': False, 'erro': 'Nome do cliente não informado.'}), 400
-
-    sess_data = _get_current_session()
-    if sess_data is None:
-        return jsonify({'ok': False, 'erro': 'Sessão expirada. Faça upload novamente.'}), 400
-
-    df         = sess_data['df']
-    versao_ref = sess_data['versao_ref']
-
-    df_cli = df[df['NOME FANTASIA DO CLIENTE'] == nome_cli].copy()
-    if df_cli.empty:
-        return jsonify({'ok': False, 'erro': f'Cliente "{nome_cli}" não encontrado na sessão.'}), 404
-
-    # Identificar desatualizados via _alerta_milvus
-    df_alertas = calcular_alertas(df_cli, versao_ref)
-    mask_desat = df_alertas.get('_alerta_milvus', pd.Series(dtype=str)).fillna('').str.len() > 0
-    df_desat   = df_alertas[mask_desat]
-
-    if df_desat.empty:
-        return jsonify({
-            'ok':    True,
-            'msg':   'Todos os dispositivos já estão na versão de referência.',
-            'total': 0,
-        })
-
-    hostnames = df_desat['NOME DO DISPOSITIVO'].dropna().tolist()
-
-    # Buscar IDs Milvus no banco
-    milvus_ids   = []
-    nao_mapeados = []
-    for host in hostnames:
-        entry = DispositivosMap.query.filter_by(
-            hostname=host.strip(), nome_fantasia=nome_cli
-        ).first()
-        if entry and entry.milvus_dispositivo_id:
-            milvus_ids.append(entry.milvus_dispositivo_id)
-        else:
-            nao_mapeados.append(host)
-
-    if not milvus_ids:
-        return jsonify({
-            'ok':           False,
-            'erro':         ('Nenhum dispositivo mapeado no banco. '
-                             'Execute "Sincronizar IDs" e tente novamente.'),
-            'nao_mapeados': nao_mapeados,
-            'total_desat':  len(hostnames),
-        }), 400
-
-    # Chamar API Milvus
-    ok, msg, detalhes = milvus_api.push_atualizacao(milvus_ids)
-    logger.info('push-milvus: cliente=%s | ids=%s | ok=%s | msg=%s',
-                nome_cli, milvus_ids, ok, msg)
-
-    return jsonify({
-        'ok':            ok,
-        'msg':           msg,
-        'total_enviado': len(milvus_ids),
-        'nao_mapeados':  nao_mapeados,
-        'detalhes_api':  detalhes,
-    }), 200 if ok else 502
-
-
-# ── APScheduler — job diário de sync de IDs ──────────────────────────────────
 @app.route('/download/relatorio-consolidado', methods=['GET'])
 def download_relatorio_consolidado():
     """
@@ -1143,67 +958,4 @@ def download_relatorio_consolidado():
     except Exception as e:
         logger.exception('download_relatorio_consolidado: erro inesperado')
         return jsonify({'erro': f'Erro inesperado: {str(e)}'}), 500
-
-
-def _job_sync_ids_diario():
-    """Executado às 02:00 diariamente para manter DispositivosMap atualizado."""
-    import requests as _req
-    import time as _t
-    token = os.environ.get('MILVUS_API_TOKEN')
-    if not token:
-        logger.warning('job_sync_ids: MILVUS_API_TOKEN não configurado — pulando')
-        return
-    with app.app_context():
-        from models import db as _db, DispositivosMap as _DM
-        try:
-            pagina = 1
-            agora  = datetime.utcnow()
-            while True:
-                resp = _req.post(
-                    'https://apiintegracao.milvus.com.br/api/dispositivos/listagem',
-                    json={'is_paginate': True, 'total_registros': 1000, 'pagina': 1},
-                    headers={'Authorization': token, 'Content-Type': 'application/json'},
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                data    = resp.json()
-                lista   = data.get('lista', [])
-                last_pg = int(data.get('meta', {}).get('paginate', {}).get('last_page', 1))
-                for item in lista:
-                    host = (item.get('hostname') or '').strip()
-                    nome = (item.get('nome_fantasia') or '').strip()
-                    if not host or not nome:
-                        continue
-                    did   = item.get('id') or item.get('dispositivo_id')
-                    ativo = item.get('is_ativo', True)
-                    entry = _DM.query.filter_by(hostname=host, nome_fantasia=nome).first()
-                    if entry:
-                        entry.milvus_dispositivo_id = did
-                        entry.is_ativo    = ativo
-                        entry.ultima_sync = agora
-                    else:
-                        _db.session.add(_DM(
-                            hostname=host, nome_fantasia=nome,
-                            milvus_dispositivo_id=did,
-                            is_ativo=ativo, ultima_sync=agora,
-                        ))
-                _db.session.commit()
-                break  # total_registros=1000 traz tudo em 1 chamada — sem paginação
-            logger.info('job_sync_ids: concluído — %d dispositivos', len(lista))
-        except Exception:
-            logger.exception('job_sync_ids: erro durante execução diária')
-
-try:
-    _scheduler = BackgroundScheduler(timezone='America/Sao_Paulo')
-    _scheduler.add_job(_job_sync_ids_diario, 'cron', hour=2, minute=0,
-                       id='sync_ids_diario', replace_existing=True)
-    _scheduler.start()
-    logger.info('APScheduler iniciado — sync_ids agendado para 02:00 BRT')
-except Exception as _sch_err:
-    logger.warning('APScheduler não iniciado: %s', _sch_err)
-
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
-
 
