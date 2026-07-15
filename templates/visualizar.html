@@ -114,25 +114,12 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 .alerta-card .alerta-lbl{font-size:11px;color:var(--gray4);margin-top:2px}
 
 /* Milvus info bar */
-.milvus-bar{background:var(--navy3);border-radius:8px;padding:10px 14px;
             border:1px solid rgba(0,200,212,.2);display:flex;align-items:center;
             gap:10px;font-size:12px;color:var(--gray3);margin-bottom:20px;flex-wrap:wrap}
-.milvus-bar strong{color:var(--cyan)}
-.btn-push-milvus{background:var(--cyan);color:#000;border:none;border-radius:6px;
-                 padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;
-                 white-space:nowrap;transition:opacity .15s}
-.btn-push-milvus:hover{opacity:.85}
-.btn-push-milvus:disabled{opacity:.5;cursor:wait}
+
+
 /* Modal push */
-#pushModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;
-           align-items:center;justify-content:center}
-#pushModal.open{display:flex}
-#pushModalBox{background:#1A2B3C;border:1px solid rgba(0,200,212,.3);border-radius:12px;
-              padding:28px 32px;max-width:420px;width:90%;text-align:center}
-#pushModalBox h3{margin:0 0 12px;color:var(--cyan);font-size:16px}
-#pushModalBody{font-size:13px;color:var(--gray3);line-height:1.6}
-#pushModalClose{margin-top:18px;background:var(--navy3);color:var(--white);border:1px solid var(--cyan);
-                border-radius:6px;padding:6px 18px;cursor:pointer;font-size:12px}
+
 
 /* ── Vista Detalhe ── */
 .search-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
@@ -202,25 +189,11 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
   .tab-btn{padding:10px 12px;font-size:12px}
 }
 
-/* ── Barra de sincronização de IDs ─────────────────────── */
-#sync-bar{display:flex;align-items:center;justify-content:space-between;
-  flex-wrap:wrap;gap:10px;background:var(--navy2);border:1px solid rgba(255,255,255,.07);
-  border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:var(--gray3)}
-#sync-bar.rodando{border-color:rgba(0,200,212,.35)}
-#sync-bar.ok{border-color:rgba(80,200,120,.3)}
-#sync-bar.alerta{border-color:rgba(255,193,7,.3)}
+
 .sync-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.sync-dot.ok{background:#4CAF50}
-.sync-dot.rodando{background:var(--cyan);animation:pulse 1.2s infinite}
-.sync-dot.alerta{background:#FFC107}
-.sync-dot.erro{background:#FF6B6B}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.btn-sync{background:transparent;color:var(--cyan);border:1px solid rgba(0,200,212,.4);
-  border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;
-  white-space:nowrap;transition:all .15s}
-.btn-sync:hover{background:rgba(0,200,212,.1)}
-.btn-sync:disabled{opacity:.5;cursor:wait}
+
+
 .sync-progress{font-size:11px;color:var(--cyan)}
 .sync-countdown{font-size:11px;color:var(--gray4)}
 
@@ -262,6 +235,9 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
   color:var(--gray3);vertical-align:middle}
 .pf-table tr:hover td{background:rgba(255,255,255,.03)}
 .pf-empty{padding:24px;text-align:center;color:var(--gray4);font-size:12px}
+.badge-tipo{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-tipo-sc{background:rgba(255,107,107,.15);color:#FF6B6B;border:1px solid rgba(255,107,107,.3)}
+.badge-tipo-mil{background:rgba(86,204,242,.15);color:#56CCF2;border:1px solid rgba(86,204,242,.3)}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -313,17 +289,6 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
 
   <!-- Main content -->
   <div id="main-content" style="display:none">
-
-    <!-- Sync IDs bar -->
-    <div id="sync-bar" class="alerta">
-      <div class="sync-info">
-        <span class="sync-dot alerta" id="sync-dot"></span>
-        <span id="sync-status-text">IDs não sincronizados — execute sincronização para habilitar o push</span>
-      </div>
-      <button class="btn-sync" id="btn-sync-ids" onclick="iniciarSyncIds()">
-        🔄 Sincronizar IDs Milvus
-      </button>
-    </div>
 
 
     <!-- Painel Global de Filtros -->
@@ -462,13 +427,7 @@ function renderTab(cli, idx){
         &nbsp;·&nbsp;
         <span style="color:${mi.badge==='yellow'?'#FFC000':'#56CCF2'}">${escHtml(mi.label||'')}</span>
       </span>
-      ${mi.n_desatualizadas > 0 ? `
-      <button
-        class="btn-push-milvus"
-        onclick="solicitarPushMilvus(${JSON.stringify(nome)})"
-        title="Disparar atualização do agente Milvus nos ${mi.n_desatualizadas} dispositivo(s) desatualizado(s)">
-        🚀 Solicitar push à Milvus
-      </button>` : ''}
+      ${mi.n_desatualizadas > 0 ? `` : ''}
     </div>` : '';
 
   // Vista Detalhe — table rows
@@ -775,14 +734,21 @@ const FILTRO_DEFS = [
   {tipo:'windows',        icon:'🪟', lbl:'Upgrade S.O 10→11',   bg:'#003D5C', fg:'#00B0F0'},
   {tipo:'sem_contato',    icon:'📡', lbl:'Desconectadas',        bg:'#3D0000', fg:'#FF6B6B'},
   {tipo:'milvus',         icon:'🔄', lbl:'Milvus desatualizado', bg:'#0D2E4A', fg:'#56CCF2'},
+  {tipo:'atualizar_agente', icon:'🛠️', lbl:'Atualizar Agente',   bg:'#1A0A3A', fg:'#B39DDB'},
 ];
 
 function _contarFiltro(clientes, tipo){
   let n = 0;
   clientes.forEach(cli => {
     cli.dispositivos.forEach(d => {
+      if (tipo === 'atualizar_agente') {
+        if (d.alertas && d.alertas.some(a => a.tipo === 'milvus' || a.tipo === 'sem_contato')) n++;
+        return;
+      }
       if(tipo === 'critico')
         n += (d.classificacao === 'CRÍTICO') ? 1 : 0;
+      else if(tipo === 'atualizar_agente')
+        n += (d.alertas && d.alertas.some(a => a.tipo==='milvus'||a.tipo==='sem_contato')) ? 1 : 0;
       else
         n += d.alertas.some(a => a.tipo === tipo) ? 1 : 0;
     });
@@ -831,13 +797,28 @@ function ativarFiltro(tipo, label){
   const linhas = [];
   _allClientes.forEach(cli => {
     cli.dispositivos.forEach(d => {
-      let match = (tipo === 'critico')
-        ? d.classificacao === 'CRÍTICO'
-        : d.alertas.some(a => a.tipo === tipo);
+      let match;
+      if(tipo === 'critico') match = d.classificacao === 'CRÍTICO';
+      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a=>a.tipo==='milvus'||a.tipo==='sem_contato');
+      else match = d.alertas.some(a => a.tipo === tipo);
+
       if(match){
-        const al = (tipo === 'critico')
-          ? '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>'
-          : alertBadges(d.alertas.filter(a => a.tipo === tipo));
+        let al, tipoCell = '';
+        if(tipo === 'critico'){
+          al = '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>';
+        } else if(tipo === 'atualizar_agente'){
+          const aSC  = d.alertas.find(a=>a.tipo==='sem_contato');
+          const aMil = d.alertas.find(a=>a.tipo==='milvus');
+          if(aSC){
+            al = alertBadges([aSC]);
+            tipoCell = '<td><span class="badge-tipo badge-tipo-sc">Sem Contato</span></td>';
+          } else {
+            al = alertBadges([aMil]);
+            tipoCell = '<td><span class="badge-tipo badge-tipo-mil">Desatualizado</span></td>';
+          }
+        } else {
+          al = alertBadges(d.alertas.filter(a => a.tipo === tipo));
+        }
         linhas.push(`
           <tr>
             <td class="hostname">${escHtml(d.hostname)}</td>
@@ -845,6 +826,7 @@ function ativarFiltro(tipo, label){
             <td>${classifBadge(d.classificacao)}</td>
             <td style="font-size:11px;color:var(--gray3)">${escHtml(d.so.replace('Microsoft ','').replace(' for Workstations',''))}</td>
             <td style="white-space:nowrap;font-size:11px">${escHtml(d.ultimo_contato)}</td>
+            ${tipoCell}
             <td>${al}</td>
           </tr>`);
       }
@@ -859,7 +841,9 @@ function ativarFiltro(tipo, label){
       <table class="pf-table">
         <thead><tr>
           <th>Dispositivo</th><th>Cliente</th><th>Classif.</th>
-          <th>S.O.</th><th>Último Contato</th><th>Alerta</th>
+          <th>S.O.</th><th>Último Contato</th>
+          ${tipo==='atualizar_agente' ? '<th>Tipo</th>' : ''}
+          <th>Alerta</th>
         </tr></thead>
         <tbody>${linhas.join('')}</tbody>
       </table>`;
@@ -881,23 +865,34 @@ function exportarFiltroXLSX(){
   const rows = [];
   _allClientes.forEach(cli => {
     cli.dispositivos.forEach(d => {
-      let match = (tipo === 'critico')
-        ? d.classificacao === 'CRÍTICO'
-        : (d.alertas && d.alertas.some(a => a.tipo === tipo));
+      let match;
+      if(tipo === 'critico') match = d.classificacao === 'CRÍTICO';
+      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a=>a.tipo==='milvus'||a.tipo==='sem_contato');
+      else match = d.alertas && d.alertas.some(a => a.tipo === tipo);
       if (!match) return;
 
-      const alertaMsg = (tipo === 'critico')
-        ? 'Laudado para Troca'
-        : ((d.alertas || []).find(a => a.tipo === tipo) || {}).msg || '';
+      let alertaMsg, alertaTipoXLSX = '';
+      if(tipo === 'critico'){
+        alertaMsg = 'Laudado para Troca';
+      } else if(tipo === 'atualizar_agente'){
+        const aSC  = (d.alertas||[]).find(a=>a.tipo==='sem_contato');
+        const aMil = (d.alertas||[]).find(a=>a.tipo==='milvus');
+        if(aSC){ alertaMsg = aSC.msg; alertaTipoXLSX = 'Sem Contato'; }
+        else   { alertaMsg = aMil ? aMil.msg : ''; alertaTipoXLSX = 'Desatualizado'; }
+      } else {
+        alertaMsg = ((d.alertas || []).find(a => a.tipo === tipo) || {}).msg || '';
+      }
 
-      rows.push({
+      const row_obj = {
         'Dispositivo':    d.nome           || '',
         'Cliente':        cli.nome         || '',
         'Classificação':  d.classificacao  || '',
         'S.O.':           d.so             || '',
         'Último Contato': d.ultimo_contato || '',
         'Alerta':         alertaMsg,
-      });
+      };
+      if (alertaTipoXLSX) row_obj['Tipo Alerta'] = alertaTipoXLSX;
+      rows.push(row_obj);
     });
   });
 
@@ -931,163 +926,6 @@ function fecharFiltroPainel(){
 document.addEventListener('DOMContentLoaded', init);
 </script>
 
-<!-- ── Modal Push Milvus ─────────────────────────────────────── -->
-<div id="pushModal" role="dialog" aria-modal="true" aria-labelledby="pushModalTitle">
-  <div id="pushModalBox">
-    <h3 id="pushModalTitle">Push Milvus</h3>
-    <div id="pushModalBody">Aguarde…</div>
-    <button id="pushModalClose" onclick="closePushModal()" style="display:none">Fechar</button>
-  </div>
-</div>
-
-<script>
-function openPushModal(html, showClose){
-  document.getElementById('pushModalBody').innerHTML  = html;
-  document.getElementById('pushModalClose').style.display = showClose ? '' : 'none';
-  document.getElementById('pushModal').classList.add('open');
-}
-function closePushModal(){
-  document.getElementById('pushModal').classList.remove('open');
-}
-async function solicitarPushMilvus(nomeCliente){
-  // Desabilita botão enquanto processa
-  const btns = document.querySelectorAll('.btn-push-milvus');
-  btns.forEach(b=>{ b.disabled=true; b.textContent='⏳ Enviando…'; });
-  openPushModal(
-    '<p>🔄 Solicitando push de atualização para <strong>' +
-    nomeCliente.replace(/</g,'&lt;') + '</strong>…</p>', false
-  );
-  try {
-    const r = await fetch('/api/push-milvus', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({cliente: nomeCliente})
-    });
-    const d = await r.json();
-    if(d.ok){
-      let html = `<p>✅ <strong>Push enviado com sucesso!</strong></p>
-        <p>${d.total_enviado} dispositivo(s) notificado(s).</p>`;
-      if(d.nao_mapeados && d.nao_mapeados.length){
-        html += `<p style="color:#FFC000;font-size:11px;margin-top:8px">
-          ⚠️ ${d.nao_mapeados.length} dispositivo(s) sem ID mapeado
-          (execute "Sincronizar IDs" para incluí-los na próxima vez):<br>
-          <em>${d.nao_mapeados.join(', ')}</em></p>`;
-      }
-      openPushModal(html, true);
-    } else {
-      const errMsg = d.erro || d.msg || 'Erro desconhecido.';
-      let html = `<p>❌ <strong>Falha no push:</strong></p><p>${errMsg}</p>`;
-      if(d.nao_mapeados && d.nao_mapeados.length){
-        html += `<p style="font-size:11px;color:var(--gray4);margin-top:6px">
-          Dispositivos não mapeados: ${d.nao_mapeados.join(', ')}</p>`;
-      }
-      openPushModal(html, true);
-    }
-  } catch(e){
-    openPushModal('<p>❌ Erro de rede ao contatar o servidor.<br><small>' + e.message + '</small></p>', true);
-  } finally {
-    btns.forEach(b=>{ b.disabled=false; b.textContent='🚀 Solicitar push à Milvus'; });
-  }
-}
-
-// ── Sincronização de IDs Milvus ──────────────────────────────────────────────
-
-function _fmtData(dtStr) {
-  if (!dtStr) return '';
-  try {
-    const d = new Date(dtStr + 'Z');   // força UTC
-    return ' · ' + d.toLocaleDateString('pt-BR') +
-           ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-  } catch(_) { return ''; }
-}
-
-function _setBarraSync(cls, dotCls, html, btnTxt, disabled) {
-  const bar = document.getElementById('sync-bar');
-  const dot = document.getElementById('sync-dot');
-  const txt = document.getElementById('sync-status-text');
-  const btn = document.getElementById('btn-sync-ids');
-  if (!bar) return;
-  bar.className  = cls;
-  dot.className  = 'sync-dot ' + dotCls;
-  txt.innerHTML  = html;
-  btn.textContent = btnTxt;
-  btn.disabled   = disabled;
-}
-
-async function carregarStatusSync() {
-  try {
-    const data = await (await fetch('/sync-ids/status')).json();
-    const n    = data.total_mapeados || 0;
-    if (n > 0) {
-      _setBarraSync('ok', 'ok',
-        `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`,
-        '🔄 Re-sincronizar', false);
-    } else {
-      _setBarraSync('alerta', 'alerta',
-        'IDs não sincronizados — execute sincronização para habilitar o push',
-        '🔄 Sincronizar IDs Milvus', false);
-    }
-  } catch(_) {}
-}
-
-async function iniciarSyncIds() {
-  _setBarraSync('rodando', 'rodando',
-    '<strong>Sincronizando…</strong> buscando dispositivos da Milvus',
-    '⏳ Sincronizando…', true);
-  try {
-    const resp = await fetch('/sync-ids', {method:'POST'});
-    const data = await resp.json();
-    if (data.ok) {
-      const n = data.total_mapeados || 0;
-      _setBarraSync('ok', 'ok',
-        `<strong>${n} IDs mapeados</strong>${_fmtData(data.ultima_sync)}`,
-        '🔄 Re-sincronizar', false);
-    } else {
-      _setBarraSync('alerta', 'erro',
-        '❌ Erro: ' + (data.erro || 'falha desconhecida'),
-        '🔄 Tentar novamente', false);
-    }
-  } catch(e) {
-    _setBarraSync('alerta', 'erro',
-      '❌ Erro de rede. Tente novamente.',
-      '🔄 Tentar novamente', false);
-  }
-}
-
-// ── Download Consolidado ──────────────────────────────────────────────────────
-async function baixarConsolidado() {
-  const btn = document.getElementById('btn-consolidado');
-  const orig = btn.textContent;
-  btn.disabled    = true;
-  btn.textContent = '⏳ Gerando…';
-  try {
-    const resp = await fetch('/download/relatorio-consolidado');
-    if (!resp.ok) {
-      const err = await resp.json().catch(()=>({erro:'Erro desconhecido'}));
-      alert('Erro: ' + (err.erro || resp.statusText));
-      return;
-    }
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'Relatorio_Consolidado_Altcom365.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch(e) {
-    alert('Erro ao baixar: ' + e.message);
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = orig;
-  }
-}
-
-// Carregar status ao abrir a página
-document.addEventListener('DOMContentLoaded', () => setTimeout(carregarStatusSync, 1200));
-
-</script>
 </body>
 </html>
 
