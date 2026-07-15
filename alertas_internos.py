@@ -64,6 +64,18 @@ def _ver_tuple(v):
         return (0,)
 
 
+# ── Aliases de versão temporários ────────────────────────────────────────────
+# Quando a Milvus lança uma versão errada e depois corrige, mapear aqui.
+# Remover o alias após normalização completa do parque.
+VERSAO_ALIASES: dict = {
+    '113.0.0.0': '111.0.0.0',   # lançamento errôneo jul/2026 — remover após correção
+}
+
+def _normalizar_versao(v: str) -> str:
+    """Aplica alias de versão antes de qualquer comparação."""
+    s = str(v).strip()
+    return VERSAO_ALIASES.get(s, s)
+
 # -- Versao de referencia do agente Milvus (V11: nova regra semver) -----------
 
 def calcular_versao_referencia(df):
@@ -97,6 +109,7 @@ def calcular_versao_referencia(df):
         return (
             subset[col_versao]
             .astype(str).str.strip()
+            .apply(_normalizar_versao)   # aplica aliases antes da contagem
             .replace({'nan': None, 'Não possui': None, 'nao possui': None, '': None})
             .dropna()
         )
@@ -132,7 +145,7 @@ def calcular_versao_referencia(df):
         versao_ref = contagem.index[0]   # já está ordenada por frequência DESC
 
     # --- Passo 4: contar desatualizadas no parque inteiro ───────────────────
-    todas = df[col_versao].astype(str).str.strip()
+    todas = df[col_versao].astype(str).str.strip().apply(_normalizar_versao)
     n_desatualizadas = int(
         todas.apply(
             lambda v: v not in ('', 'nan', 'Não possui', 'nao possui') and v != versao_ref
@@ -224,7 +237,7 @@ def calcular_alertas(df, versao_ref=None):
     # 4. Agente Milvus desatualizado (opcional)
     if versao_ref and 'VERSÃO DO CLIENT' in df.columns:
         def _milvus_alerta(v):
-            s = str(v).strip()
+            s = _normalizar_versao(str(v).strip())
             if s in ('', 'nan', 'Não possui'):
                 return ""
             # Alerta para qualquer versao diferente da referencia (mais antiga OU mais nova)
