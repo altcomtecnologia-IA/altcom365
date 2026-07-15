@@ -235,9 +235,6 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
   color:var(--gray3);vertical-align:middle}
 .pf-table tr:hover td{background:rgba(255,255,255,.03)}
 .pf-empty{padding:24px;text-align:center;color:var(--gray4);font-size:12px}
-.badge-tipo{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
-.badge-tipo-sc{background:rgba(255,107,107,.15);color:#FF6B6B;border:1px solid rgba(255,107,107,.3)}
-.badge-tipo-mil{background:rgba(86,204,242,.15);color:#56CCF2;border:1px solid rgba(86,204,242,.3)}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -733,7 +730,6 @@ const FILTRO_DEFS = [
   {tipo:'armazenamento',  icon:'💾', lbl:'Alerta Armaz.',        bg:'#5D3A00', fg:'#FFC000'},
   {tipo:'windows',        icon:'🪟', lbl:'Upgrade S.O 10→11',   bg:'#003D5C', fg:'#00B0F0'},
   {tipo:'sem_contato',    icon:'📡', lbl:'Desconectadas',        bg:'#3D0000', fg:'#FF6B6B'},
-  {tipo:'milvus',         icon:'🔄', lbl:'Milvus desatualizado', bg:'#0D2E4A', fg:'#56CCF2'},
   {tipo:'atualizar_agente', icon:'🛠️', lbl:'Atualizar Agente',   bg:'#1A0A3A', fg:'#B39DDB'},
 ];
 
@@ -741,14 +737,10 @@ function _contarFiltro(clientes, tipo){
   let n = 0;
   clientes.forEach(cli => {
     cli.dispositivos.forEach(d => {
-      if (tipo === 'atualizar_agente') {
-        if (d.alertas && d.alertas.some(a => a.tipo === 'milvus' || a.tipo === 'sem_contato')) n++;
-        return;
-      }
       if(tipo === 'critico')
         n += (d.classificacao === 'CRÍTICO') ? 1 : 0;
       else if(tipo === 'atualizar_agente')
-        n += (d.alertas && d.alertas.some(a => a.tipo==='milvus'||a.tipo==='sem_contato')) ? 1 : 0;
+        n += (d.alertas && d.alertas.some(a => a.tipo === 'milvus')) ? 1 : 0;
       else
         n += d.alertas.some(a => a.tipo === tipo) ? 1 : 0;
     });
@@ -799,26 +791,13 @@ function ativarFiltro(tipo, label){
     cli.dispositivos.forEach(d => {
       let match;
       if(tipo === 'critico') match = d.classificacao === 'CRÍTICO';
-      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a=>a.tipo==='milvus'||a.tipo==='sem_contato');
+      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a => a.tipo === 'milvus');
       else match = d.alertas.some(a => a.tipo === tipo);
 
       if(match){
-        let al, tipoCell = '';
-        if(tipo === 'critico'){
-          al = '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>';
-        } else if(tipo === 'atualizar_agente'){
-          const aSC  = d.alertas.find(a=>a.tipo==='sem_contato');
-          const aMil = d.alertas.find(a=>a.tipo==='milvus');
-          if(aSC){
-            al = alertBadges([aSC]);
-            tipoCell = '<td><span class="badge-tipo badge-tipo-sc">Sem Contato</span></td>';
-          } else {
-            al = alertBadges([aMil]);
-            tipoCell = '<td><span class="badge-tipo badge-tipo-mil">Desatualizado</span></td>';
-          }
-        } else {
-          al = alertBadges(d.alertas.filter(a => a.tipo === tipo));
-        }
+        const al = (tipo === 'critico')
+          ? '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>'
+          : alertBadges(d.alertas.filter(a => a.tipo === (tipo === 'atualizar_agente' ? 'milvus' : tipo)));
         linhas.push(`
           <tr>
             <td class="hostname">${escHtml(d.hostname)}</td>
@@ -826,7 +805,6 @@ function ativarFiltro(tipo, label){
             <td>${classifBadge(d.classificacao)}</td>
             <td style="font-size:11px;color:var(--gray3)">${escHtml(d.so.replace('Microsoft ','').replace(' for Workstations',''))}</td>
             <td style="white-space:nowrap;font-size:11px">${escHtml(d.ultimo_contato)}</td>
-            ${tipoCell}
             <td>${al}</td>
           </tr>`);
       }
@@ -841,9 +819,7 @@ function ativarFiltro(tipo, label){
       <table class="pf-table">
         <thead><tr>
           <th>Dispositivo</th><th>Cliente</th><th>Classif.</th>
-          <th>S.O.</th><th>Último Contato</th>
-          ${tipo==='atualizar_agente' ? '<th>Tipo</th>' : ''}
-          <th>Alerta</th>
+          <th>S.O.</th><th>Último Contato</th><th>Alerta</th>
         </tr></thead>
         <tbody>${linhas.join('')}</tbody>
       </table>`;
@@ -867,32 +843,28 @@ function exportarFiltroXLSX(){
     cli.dispositivos.forEach(d => {
       let match;
       if(tipo === 'critico') match = d.classificacao === 'CRÍTICO';
-      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a=>a.tipo==='milvus'||a.tipo==='sem_contato');
+      else if(tipo === 'atualizar_agente') match = d.alertas && d.alertas.some(a => a.tipo === 'milvus');
       else match = d.alertas && d.alertas.some(a => a.tipo === tipo);
       if (!match) return;
 
-      let alertaMsg, alertaTipoXLSX = '';
+      let alertaMsg;
       if(tipo === 'critico'){
         alertaMsg = 'Laudado para Troca';
       } else if(tipo === 'atualizar_agente'){
-        const aSC  = (d.alertas||[]).find(a=>a.tipo==='sem_contato');
         const aMil = (d.alertas||[]).find(a=>a.tipo==='milvus');
-        if(aSC){ alertaMsg = aSC.msg; alertaTipoXLSX = 'Sem Contato'; }
-        else   { alertaMsg = aMil ? aMil.msg : ''; alertaTipoXLSX = 'Desatualizado'; }
+        alertaMsg = aMil ? aMil.msg : '';
       } else {
         alertaMsg = ((d.alertas || []).find(a => a.tipo === tipo) || {}).msg || '';
       }
 
-      const row_obj = {
+      rows.push({
         'Dispositivo':    d.nome           || '',
         'Cliente':        cli.nome         || '',
         'Classificação':  d.classificacao  || '',
         'S.O.':           d.so             || '',
         'Último Contato': d.ultimo_contato || '',
         'Alerta':         alertaMsg,
-      };
-      if (alertaTipoXLSX) row_obj['Tipo Alerta'] = alertaTipoXLSX;
-      rows.push(row_obj);
+      });
     });
   });
 
