@@ -393,6 +393,8 @@ def api_dados_visualizacao():
 
             dispositivos.append({
                 'hostname':       str(row.get('Nome do dispositivo', row.get('NOME DO DISPOSITIVO', '—'))),
+                'apelido':        str(row.get('Apelido', row.get('APELIDO', '—'))),
+                'usuario':        str(row.get('Usuário logado', row.get('USUÁRIO LOGADO', '—'))),
                 'classificacao':  classif,
                 'versao':         str(row.get('Versão do client', row.get('VERSÃO DO CLIENT', '—'))),
                 'so':             str(row.get('Sistema operacional', row.get('SISTEMA OPERACIONAL', '—'))),
