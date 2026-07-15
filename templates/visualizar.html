@@ -858,7 +858,9 @@ function exportarFiltroXLSX(){
       }
 
       rows.push({
-        'Dispositivo':    d.nome           || '',
+        'Dispositivo':    d.hostname       || '',
+        'Apelido':        d.apelido        || '',
+        'Usuário':        d.usuario        || '',
         'Cliente':        cli.nome         || '',
         'Classificação':  d.classificacao  || '',
         'S.O.':           d.so             || '',
@@ -873,7 +875,7 @@ function exportarFiltroXLSX(){
   const ws = XLSX.utils.json_to_sheet(rows);
 
   // Larguras de coluna (community edition suporta !cols)
-  ws['!cols'] = [{wch:30},{wch:26},{wch:14},{wch:32},{wch:20},{wch:50}];
+  ws['!cols'] = [{wch:28},{wch:22},{wch:22},{wch:26},{wch:14},{wch:32},{wch:20},{wch:50}];
 
   // Linha de cabeçalho em maiúsculas para destaque
   const hdr = Object.keys(rows[0]);
