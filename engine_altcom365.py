@@ -120,8 +120,12 @@ def parse_cpu(proc: str) -> tuple:
     if rm:
         return f'ryzen{rm.group(1)}', int(rm.group(2)), ''
 
-    # Intel N-series (low-power): "N100", "N4020" etc.
-    if re.search(r'i3-n\d+|core.*\bn\d{3,4}\b', p):
+    # Intel N-series: distinguir Alder Lake 2023 (i3-N305) do antigo Atom/Celeron
+    # Novo: i3/i5/i7-N + 2-3 dígitos → moderno, comparável a 11ª/12ª gen
+    if re.search(r'i[3579]-n\d{2,3}\b', p):
+        return 'n-alder', 12, ''
+    # Antigo (Celeron/Pentium N): N4020, N5100, N6000, N3060 — 4 dígitos
+    if re.search(r'\bn\d{4}\b', p):
         return 'n-series', 0, ''
 
     # Intel Core novo naming (sem "i"): "Core 5 210H", "Core Ultra 7 150H", "Core(TM) 5 210H"
@@ -160,7 +164,9 @@ def base_tier(dev: str, proc: str) -> int:
     if familia.startswith('ryzen'):
         return 3 if gen >= 5 else 2
 
-    # Intel N-series = CRÍTICO
+    # Intel N-series Alder Lake (i3-N305, 2023+) = ÓTIMO (tier 3)
+    if familia == 'n-alder': return 3
+    # Intel N-series antigo (Atom/Celeron) = CRÍTICO
     if familia == 'n-series': return 0
 
     # Intel Core novo naming (Core 5/7/3/9, Core Ultra) — sempre BOM ou ÓTIMO
