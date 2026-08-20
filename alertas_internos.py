@@ -212,6 +212,9 @@ def calcular_alertas(df, versao_ref=None):
         # Novo naming Intel (sem "i"): Core 5/7/3/9 e Core Ultra — sempre modernos
         if familia.startswith('core'):
             return True
+        # Intel N-series Alder Lake (i3-N305 etc.) — Win11 nativo
+        if familia == 'n-alder':
+            return True
         return False
 
     def _alerta_win(row):
