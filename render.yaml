@@ -20,6 +20,6 @@ services:
         sync: false          # policy audience tag — obtido no painel CF Zero Trust
       # ---------- Interruptores de auth ----------------------------------------
       - key: AUTH_ENABLED
-        value: "false"       # mudar para "true" na Fase 3
+        sync: false          # definir "true" no painel Render; "false" = emergencia
       - key: AUTH_BYPASS_PATHS
-        value: "/health"     # caminhos sem auth, separados por vírgula
+        value: "/health"     # caminhos sem auth, separados por virgula
