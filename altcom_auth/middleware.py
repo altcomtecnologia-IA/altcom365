@@ -42,8 +42,27 @@ def registrar(app):
 
     @app.before_request
     def _verificar_auth():
-        # Interruptor de emergência: AUTH_ENABLED=false → sem auth
+        # Interruptor de emergência: AUTH_ENABLED=false → sem auth (modo observação)
         if not _auth_habilitado():
+            # Mesmo desligado, tenta logar quem chegou (sem bloquear)
+            _obs_token = (request.headers.get('Cf-Access-Jwt-Assertion') or
+                          request.cookies.get('CF_Authorization', ''))
+            if _obs_token:
+                try:
+                    _obs_email = validar_token(_obs_token)
+                    try:
+                        _obs_id = obter_identidade(_obs_email)
+                        logger.info(
+                            "[AUTH-OBS] email=%s | grupo=%s | rota=%s",
+                            _obs_email, _obs_id['grupo'], request.path
+                        )
+                    except ValueError:
+                        logger.info(
+                            "[AUTH-OBS] email=%s | grupo=DESCONHECIDO | rota=%s",
+                            _obs_email, request.path
+                        )
+                except ValueError:
+                    logger.debug("[AUTH-OBS] token inválido | rota=%s", request.path)
             g.identidade = None
             return
 
