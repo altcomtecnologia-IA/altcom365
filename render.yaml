@@ -1,10 +1,25 @@
 services:
   - type: web
-    name: altcom365
+    name: laudostecnicos
     env: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: "3.11.0"
+      # ---------- segredos — definir no painel do Render, nunca aqui ----------
+      - key: SECRET_KEY
+        sync: false
+      - key: MILVUS_API_TOKEN
+        sync: false
+      # ---------- Cloudflare Access (Fase 1-4) ---------------------------------
+      - key: CF_ACCESS_TEAM_DOMAIN
+        sync: false          # ex: altcom.cloudflareaccess.com
+      - key: CF_ACCESS_AUD
+        sync: false          # policy audience tag — obtido no painel CF Zero Trust
+      # ---------- Interruptores de auth ----------------------------------------
+      - key: AUTH_ENABLED
+        value: "false"       # mudar para "true" na Fase 3
+      - key: AUTH_BYPASS_PATHS
+        value: "/health"     # caminhos sem auth, separados por vírgula
