@@ -17,11 +17,15 @@ from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
 import pandas as pd
 import threading
+from altcom_auth import registrar as _registrar_auth, requer
 
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key          = os.environ.get('SECRET_KEY', 'altcom365-v2-secret-key')
+
+# Registra middleware de autenticação (Fase 2 — modo observação)
+_registrar_auth(app)
 
 @app.route('/health')
 def health():
@@ -97,6 +101,7 @@ def allowed_file(filename):
 # ── Rota principal ────────────────────────────────────────────────────────────
 
 @app.route('/')
+@requer("laudo:ler")
 def index():
     return render_template('index.html')
 
@@ -105,6 +110,7 @@ def index():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/upload-completo', methods=['POST'])
+@requer("laudo:ler")
 def upload_completo():
     """
     Recebe o Relatório Milvus Completo.
@@ -197,6 +203,7 @@ def upload_completo():
 
 
 @app.route('/preview-clientes', methods=['POST'])
+@requer("laudo:ler")
 def preview_clientes():
     """
     Recebe lista de clientes selecionados.
@@ -233,6 +240,7 @@ def preview_clientes():
 
 
 @app.route('/baixar-laudos-cliente', methods=['POST'])
+@requer("laudo:ler")
 def baixar_laudos_cliente():
     """
     Gera ZIP com 1 Excel de Laudo do Cliente por cliente selecionado.
@@ -285,6 +293,7 @@ def baixar_laudos_cliente():
 
 
 @app.route('/baixar-relatorios-internos', methods=['POST'])
+@requer("laudo:ler")
 def baixar_relatorios_internos():
     """
     Gera ZIP com 1 Excel de Relatório Interno por cliente selecionado.
@@ -341,12 +350,14 @@ def baixar_relatorios_internos():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/visualizar')
+@requer("laudo:ler")
 def visualizar():
     """Tela de visualização integrada — Phase 2."""
     return render_template('visualizar.html')
 
 
 @app.route('/api/dados-visualizacao', methods=['GET'])
+@requer("laudo:ler")
 def api_dados_visualizacao():
     """
     Retorna dados completos por cliente para a tela de visualização.
@@ -422,6 +433,7 @@ def api_dados_visualizacao():
 
 
 @app.route('/api/snapshots/<path:nome_fantasia>', methods=['GET'])
+@requer("laudo:ler")
 def api_snapshots(nome_fantasia):
     """Histórico de snapshots de um cliente (últimos 20)."""
     try:
@@ -436,6 +448,7 @@ def api_snapshots(nome_fantasia):
 
 
 @app.route('/baixar-laudo-unico', methods=['POST'])
+@requer("laudo:ler")
 def baixar_laudo_unico():
     """Download do laudo de eficiência de um único cliente."""
     data    = request.get_json(force=True, silent=True) or {}
@@ -474,6 +487,7 @@ def baixar_laudo_unico():
 
 
 @app.route('/baixar-relatorio-unico', methods=['POST'])
+@requer("laudo:ler")
 def baixar_relatorio_unico():
     """Download do relatório interno de um único cliente."""
     data    = request.get_json(force=True, silent=True) or {}
@@ -535,6 +549,7 @@ def _get_cliente(df):
 
 
 @app.route('/gerar', methods=['POST'])
+@requer("laudo:ler")
 def gerar():
     path, err_resp, err_code = _load_file_df(request.files)
     if err_resp:
@@ -573,6 +588,7 @@ def gerar():
 
 
 @app.route('/gerar/interno', methods=['POST'])
+@requer("laudo:ler")
 def gerar_interno():
     path, err_resp, err_code = _load_file_df(request.files)
     if err_resp:
@@ -611,6 +627,7 @@ def gerar_interno():
 
 
 @app.route('/preview', methods=['POST'])
+@requer("laudo:ler")
 def preview():
     """Rota legada para formato antigo (1 cliente por vez)."""
     path, err_resp, err_code = _load_file_df(request.files)
@@ -858,6 +875,7 @@ def sync_clientes():
 
 
 @app.route('/download/relatorio-consolidado', methods=['GET'])
+@requer("laudo:ler")
 def download_relatorio_consolidado():
     """
     Gera um único arquivo Excel com todos os Relatórios Internos da sessão atual,
