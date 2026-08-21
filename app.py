@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key          = os.environ.get('SECRET_KEY', 'altcom365-v2-secret-key')
+
+@app.route('/health')
+def health():
+    """Health check para o Render — não expõe dados, nunca exige auth."""
+    return 'ok', 200
+
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
 
 # ── Banco de dados ─────────────────────────────────────────────────────────────
