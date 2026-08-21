@@ -1,0 +1,15 @@
+# config/usuarios.yaml
+# Mapeamento de usuários autenticados no Cloudflare Access para grupos internos.
+#
+# Grupos disponíveis:
+#   tecnico_gestao    — acesso total
+#   tecnico_analistas — produção técnica, sem exclusão nem dados comerciais
+#   administrativo    — leitura e exportação, sem criação de laudos
+#
+# E-mail autenticado no Cloudflare mas ausente desta lista → 403.
+# Gerenciado pelo grupo tecnico_gestao (capacidade admin:usuarios).
+
+usuarios:
+  - email: acorrea@altcom.com.br
+    nome: Altair Correa
+    grupo: tecnico_gestao
