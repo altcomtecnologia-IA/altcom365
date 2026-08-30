@@ -32,12 +32,15 @@ cliente. Por isso este arquivo:
     JWT (AUTH_ENABLED=false) ou por bypass de path, esta camada revalida
     do zero e nega mesmo assim.
 """
+import logging
 from functools import wraps
 
 from flask import request, g, jsonify
 
 from altcom_auth.jwt import validar_token
 from portal.models import Usuario
+
+logger = logging.getLogger(__name__)
 
 
 # Capacidades por papel — briefing seção 2. N3 = N1/N2 + duas extras
@@ -77,7 +80,17 @@ def _capacidades_do_papel(papel):
 
 
 def tem_capacidade(capacidades, capacidade):
-    return 'clientes.*' in capacidades or capacidade in capacidades
+    """
+    O curinga clientes.* só cobre capacidades do próprio módulo — escopo
+    explícito por prefixo, não "qualquer string". Sem isso, o dia em que
+    outro módulo (Painel de Maturidade, por exemplo) nomear uma capacidade
+    própria, um gestor de Clientes passaria nela sem que ninguém tivesse
+    decidido isso: hoje é inofensivo só porque toda capacidade em uso
+    começa com "clientes.", não por design (achado do passo 3, 30/08/2026).
+    """
+    if capacidade in capacidades:
+        return True
+    return 'clientes.*' in capacidades and capacidade.startswith('clientes.')
 
 
 def _extrair_token():
@@ -135,7 +148,29 @@ def requer_clientes(capacidade):
         def wrapper(*args, **kwargs):
             try:
                 identidade = resolver_identidade()
-            except ValueError:
+            except ValueError as motivo:
+                logger.warning(
+                    "CLIENTES AUTH NEGADO | rota=%s | método=%s | motivo=%s",
+                    request.path, request.method, motivo,
+                )
+                return jsonify({"erro": "Acesso não autorizado"}), 403
+            except Exception:
+                # validar_token não levanta só ValueError: _get_certs() ->
+                # _fetch_certs() usa urllib.request.urlopen, que levanta
+                # URLError/HTTPError/timeout se o endpoint de certs do
+                # Cloudflare estiver fora do ar com o cache frio ou
+                # expirado (achado do passo 3, 30/08/2026). Sem este catch,
+                # essa exceção atravessava o decorator e virava 500 com
+                # traceback em vez de 403 limpo — o acesso já era negado
+                # de qualquer forma (a exceção impede que identidade seja
+                # resolvida), então isto corrige status e log, não
+                # segurança. Correção aqui, não em altcom_auth/jwt.py: esse
+                # módulo é compartilhado com o Laudos, e mexer nele sairia
+                # do isolamento da Decisão 1 por um ganho que não é dele.
+                logger.exception(
+                    "CLIENTES AUTH ERRO INESPERADO | rota=%s | método=%s",
+                    request.path, request.method,
+                )
                 return jsonify({"erro": "Acesso não autorizado"}), 403
 
             if not tem_capacidade(identidade["capacidades"], capacidade):

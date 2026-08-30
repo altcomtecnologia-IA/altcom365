@@ -118,6 +118,55 @@ def test_tem_capacidade_wildcard_gestor():
     assert tem_capacidade(CAPACIDADES_GESTOR, 'clientes.qualquer.coisa.nova')
 
 
+def test_tem_capacidade_wildcard_nao_escapa_do_prefixo_clientes():
+    """
+    Achado do passo 3, 30/08/2026: clientes.* tinha escopo implícito — só
+    inofensivo hoje porque nenhuma capacidade fora de "clientes." existe
+    ainda. Prova que o curinga não cobre um nome de módulo futuro
+    (Painel de Maturidade, por exemplo) mesmo sem esse módulo existir.
+    """
+    from clientes.auth import tem_capacidade, CAPACIDADES_GESTOR
+    assert not tem_capacidade(CAPACIDADES_GESTOR, 'maturidade.editar')
+    assert not tem_capacidade(CAPACIDADES_GESTOR, 'admin.usuarios')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Achado do passo 3 — exceção não-ValueError em resolver_identidade
+#    (endpoint de certs do Cloudflare fora do ar) deve virar 403 limpo,
+#    nunca 500 com traceback
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_erro_inesperado_na_validacao_vira_403_nao_500(client, monkeypatch):
+    """
+    validar_token() não levanta só ValueError — _get_certs() ->
+    _fetch_certs() usa urllib.request.urlopen, que levanta
+    URLError/HTTPError/timeout se o endpoint do Cloudflare estiver
+    inacessível com o cache frio/expirado. Simula isso substituindo
+    validar_token (só o de clientes/auth.py — deliberadamente reimportado
+    lá, não o mesmo objeto de altcom_auth/middleware.py) por algo que
+    levanta uma exceção genérica, e confirma que o decorator ainda
+    responde 403 limpo em vez de deixar a exceção estourar pro Flask virar
+    500.
+
+    Precisa de um JWT que passe pela validação DO MIDDLEWARE COMPARTILHADO
+    primeiro (fazer_token(), a mesma revalidada por _mock_jwks) — um token
+    malformado já seria negado ali, antes de a requisição sequer chegar na
+    rota /clientes/ e no validar_token patchado abaixo, e o teste passaria
+    por um motivo errado (confirmado: a primeira versão deste teste usava
+    um token malformado e continuava verde mesmo sem a correção).
+    """
+    import clientes.auth as clientes_auth
+
+    def _explode(token):
+        raise OSError("endpoint de certs indisponível (simulado)")
+
+    monkeypatch.setattr(clientes_auth, 'validar_token', _explode)
+    token = fazer_token(email="qualquer@altcom.com.br")
+    resp = client.get('/clientes/', headers={'Cf-Access-Jwt-Assertion': token})
+    assert resp.status_code == 403
+    assert resp.get_json() == {"erro": "Acesso não autorizado"}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. Item E — casos da matriz D4 que dependem de uma rota de revelação de
 #    credencial que ainda não existe (Fase 2). Marcados, não esquecidos.
