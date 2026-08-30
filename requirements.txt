@@ -6,3 +6,14 @@ requests>=2.31
 PyJWT>=2.4
 cryptography>=42.0
 PyYAML>=6.0
+# ---------- módulo Clientes e Processos — schema/migrations (Fase 1) ------
+# Versões fixadas: alteração de schema não pode variar com o que o pip
+# resolver decidir instalar num build futuro.
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+alembic==1.19.1
+# Runtime real do Render é Python 3.14 (render.yaml declara 3.11, mas o
+# arquivo é inerte — ver aviso lá). psycopg[binary]==3.2.13 tem wheel cp314
+# publicado — confirmado por Altair 30/08/2026 — nada compila da fonte no
+# build, pin não precisa mudar por causa disso.
+psycopg[binary]==3.2.13
