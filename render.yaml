@@ -1,13 +1,55 @@
+# ATENÇÃO — DECLARATIVO, NÃO APLICADO (confirmado 30/08/2026): não existe
+# Blueprint instance nesta conta do Render. O serviço laudostecnicos foi
+# configurado manualmente no painel, e o Render nunca leu este arquivo.
+# Config real vive só no painel do serviço — inclusive preDeployCommand,
+# preenchido lá manualmente pelo Altair. Este arquivo documenta a intenção,
+# não a reflete. Se algum dia o serviço virar Blueprint-managed, o Render
+# vai tentar reconciliar tudo daqui contra o painel — não fazer isso sem
+# decisão explícita, as env vars secretas (APP_ENCRYPTION_KEY, DATABASE_URL)
+# estão só no painel.
+#
+# Divergências confirmadas por Altair em 30/08/2026 entre este arquivo e o
+# painel real (mantidas aqui como registro, não corrigidas para "combinar",
+# porque este arquivo não aciona nada — só documenta a intenção original):
+#   - Pre-Deploy Command JÁ está configurado no painel como `alembic upgrade
+#     head`, igual ao preDeployCommand abaixo — configurado manualmente por
+#     Altair, não pelo Render lendo este arquivo.
+#   - Auto-Deploy está em "On Commit": merge na v2-api dispara deploy
+#     sozinho, sem passo manual. Relevante para o passo 3 também — qualquer
+#     merge é imediatamente produção.
+#   - startCommand real no painel é `gunicorn -w 2` (2 workers). O
+#     `gunicorn app:app --bind 0.0.0.0:$PORT` abaixo (sem -w, default 1
+#     worker) é só o que estava aqui antes deste módulo — não é o que
+#     roda. Confirma na prática o motivo de migration ir no Pre-Deploy: com
+#     2+ workers, migration no start vira corrida entre processos.
+#   - Runtime real é Python 3.14, não o 3.11.0 declarado abaixo — esse
+#     campo nunca teve efeito. psycopg[binary]==3.2.13 tem wheel cp314
+#     publicado (confirmado por Altair), então os pins do requirements.txt
+#     não mudam por causa disso.
+#   - Prova ao vivo de que migration quebrada não derruba produção: ao
+#     salvar o Pre-Deploy Command, o Render disparou deploy do fa6ad1a (o
+#     commit então corrente, sem alembic) e falhou com "alembic: command
+#     not found", exit 127. O Laudos continuou Live na versão anterior.
 services:
   - type: web
     name: laudostecnicos
     env: python
     plan: starter
     buildCommand: pip install -r requirements.txt
+    # Migration roda aqui, não no startCommand: com mais de um worker do
+    # Gunicorn, migration disparada no start vira corrida entre processos.
+    # Pre-Deploy Command do Render roda uma vez, antes do novo release
+    # receber tráfego. (Ver aviso no topo do arquivo — este campo já foi
+    # preenchido manualmente no painel com o mesmo valor, mas foi o painel
+    # que passou a valer, não este arquivo.)
+    preDeployCommand: alembic upgrade head
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.0"
+        value: "3.14"          # documentação — runtime real confirmado por
+                                # Altair 30/08/2026; patch exato não
+                                # verificado. Este campo não é lido (ver
+                                # aviso no topo do arquivo).
       # ---------- segredos — definir no painel do Render, nunca aqui ----------
       - key: SECRET_KEY
         sync: false

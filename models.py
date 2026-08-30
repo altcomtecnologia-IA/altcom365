@@ -13,6 +13,23 @@ Tabelas:
 
 REGRA: nenhum dado de classificação fica APENAS no banco.
 O Excel continua sendo a fonte verdade de classificação.
+
+ATENÇÃO (diagnóstico de 30/08/2026, ao iniciar o módulo Clientes e
+Processos): este arquivo não é importado por app.py. Nenhuma rota faz
+`from models import` ou `import models`. As rotas /sync-status e
+/sync-clientes referenciam ClientesMap, DispositivosMap e db.session sem
+nenhum import que traga esses nomes para o escopo — se qualquer uma for
+chamada, quebra com NameError (/sync-clientes também usa a variável `agora`,
+nunca definida na função). O comentário "V11: PostgreSQL + SQLAlchemy +
+Flask-Migrate" no topo do app.py nunca virou código: nem a normalização de
+DATABASE_URL de 'postgres://' para 'postgresql://' que o comentário lá
+anuncia foi escrita.
+Conclusão: estas tabelas nunca foram criadas em banco nenhum e não têm
+escrita real em produção. Ficam de fora do schema do módulo Clientes e
+Processos (ver clientes/models.py e portal/models.py, que usam a instância
+`db` de extensoes.py, não a deste arquivo). Reativar a sincronização com o
+Milvus aqui é decisão própria, separada, a ser tomada explicitamente — não
+algo para "descobrir" num diff.
 """
 
 from datetime import datetime

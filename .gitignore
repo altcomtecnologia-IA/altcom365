@@ -1,0 +1,5 @@
+
+# scratch venv usado só para gerar/testar migrations localmente
+.venv/
+__pycache__/
+*.pyc
