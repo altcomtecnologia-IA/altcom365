@@ -18,6 +18,10 @@ from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
 import pandas as pd
 import threading
 from altcom_auth import registrar as _registrar_auth, requer
+from flask_migrate import Migrate
+
+from extensoes import db, normalizar_database_url
+from clientes import clientes_bp
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +33,30 @@ _registrar_auth(app)
 
 @app.route('/health')
 def health():
-    """Health check para o Render — não expõe dados, nunca exige auth."""
+    """Health check para o Render — não expõe dados, nunca exige auth.
+    NÃO MOVER/RENOMEAR este path: é o que o health check do Render consulta
+    e o que altcom_auth/middleware.py isenta por padrão (_BYPASS_FIXO). Um
+    deploy passa no build e só falha aqui — silenciosamente, até o health
+    check derrubar o serviço. tests/test_health_bypass.py trava isso."""
     return 'ok', 200
 
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
 
 # ── Banco de dados ─────────────────────────────────────────────────────────────
-# Render entrega 'postgres://' mas SQLAlchemy 1.4+ exige 'postgresql://'
+# Normalização em extensoes.normalizar_database_url — mesma função que
+# migrations/env.py e tests/conftest.py usam, pra nunca divergir entre quem
+# sobe o app de verdade e quem roda migration ou teste (passo 3).
+app.config['SQLALCHEMY_DATABASE_URI'] = normalizar_database_url(os.environ.get('DATABASE_URL', ''))
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
+# directory='migrations' explícito: mesma pasta e mesmo alembic.ini que o
+# Pre-Deploy Command do Render usa via `alembic upgrade head` puro — nunca
+# uma configuração paralela (combinado em 30/08/2026, decisão 3 da Fase 1).
+Migrate(app, db, directory='migrations')
+
+# Módulo Clientes e Processos — blueprint isolado, prefixo /clientes/,
+# confirmado sem colisão com AUTH_BYPASS_PATHS em produção (só /health).
+app.register_blueprint(clientes_bp)
 
 
 ALLOWED_EXT = {'.xlsx', '.xls'}
@@ -101,8 +122,29 @@ def allowed_file(filename):
 # ── Rota principal ────────────────────────────────────────────────────────────
 
 @app.route('/')
-@requer("laudo:ler")
 def index():
+    """
+    Home compartilhada do portal (briefing seção 6.7: "com dois módulos, o
+    Flask não pode mais ir direto pro Laudos"). Só exige identidade válida
+    — a checagem global de altcom_auth/middleware.py, sem capacidade
+    específica; "respeitar o nível de acesso" fica pra depois, o próprio
+    briefing marca como "futuramente". Nenhuma outra rota muda de lugar —
+    só o que estava em '/' migrou pra '/laudos', abaixo.
+    """
+    return render_template('portal_home.html')
+
+
+@app.route('/laudos')
+@requer("laudo:ler")
+def laudos_home():
+    """
+    Era a rota '/'. Mesmo template, mesma proteção (@requer("laudo:ler")),
+    só o path mudou. Seguro: o JS de index.html usa paths absolutos pros
+    fetches (/upload-completo, /preview-clientes, etc.) e window.location,
+    nunca caminho relativo à própria página — nenhuma dessas rotas foi
+    movida, só a página que as invoca. Nada em app.py ou nos templates
+    referenciava o endpoint 'index' pelo nome antes desta mudança.
+    """
     return render_template('index.html')
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -38,13 +38,10 @@ if config.config_file_name is not None:
 
 # DATABASE_URL do Render vem como 'postgres://'; SQLAlchemy 2.x exige
 # 'postgresql://', e sem driver explícito tenta psycopg2 (não instalado —
-# o driver pinado no requirements.txt é psycopg 3). Normalizado aqui, não
-# em app.py (passo 3).
-_db_url = os.environ.get('DATABASE_URL', '')
-if _db_url.startswith('postgres://'):
-    _db_url = _db_url.replace('postgres://', 'postgresql+psycopg://', 1)
-elif _db_url.startswith('postgresql://'):
-    _db_url = _db_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+# o driver pinado no requirements.txt é psycopg 3). Normalização em
+# extensoes.normalizar_database_url — mesma função que app.py e
+# tests/conftest.py usam, pra nunca divergir (passo 3).
+_db_url = extensoes.normalizar_database_url(os.environ.get('DATABASE_URL', ''))
 if _db_url:
     config.set_main_option('sqlalchemy.url', _db_url)
 

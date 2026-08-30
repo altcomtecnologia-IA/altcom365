@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Altcom 365</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.5rem; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; margin-bottom: .25rem; }
+    p.sub { color: #666; margin-top: 0; margin-bottom: 2rem; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li + li { margin-top: .75rem; }
+    a { display: block; padding: .9rem 1.1rem; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #1a1a1a; }
+    a:hover { border-color: #999; }
+  </style>
+</head>
+<body>
+  <!--
+    Home mínima de propósito — briefing seção 6.7 só pede que ela exista e
+    pare de ir direto pro Laudos; "respeitar o nível de acesso" é
+    "futuramente" no próprio texto. Sem filtro por capacidade aqui ainda:
+    os dois links aparecem pra qualquer identidade válida (a mesma
+    exigência de sempre, via altcom_auth/middleware.py — nada muda nisso).
+  -->
+  <h1>Altcom 365</h1>
+  <p class="sub">Escolha um módulo.</p>
+  <ul>
+    <li><a href="/laudos">Laudos Técnicos</a></li>
+    <li><a href="/clientes/">Clientes e Processos</a></li>
+  </ul>
+</body>
+</html>
