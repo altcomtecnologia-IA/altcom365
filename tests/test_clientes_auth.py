@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 
-from tests.conftest import fazer_token
+from tests.conftest import fazer_token, criar_usuario
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -168,15 +168,80 @@ def test_erro_inesperado_na_validacao_vira_403_nao_500(client, monkeypatch):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4. Item E — casos da matriz D4 que dependem de uma rota de revelação de
-#    credencial que ainda não existe (Fase 2). Marcados, não esquecidos.
+# 4. Item E — casos da matriz D4 que dependiam de uma rota de revelação de
+#    credencial. A rota existe desde a Fase 2 (clientes/routes.py,
+#    POST /clientes/credenciais/<id>/revelar) — cobertura funcional
+#    completa da rota está em tests/test_clientes_credenciais.py; os dois
+#    testes abaixo fecham especificamente os dois casos que a matriz D4
+#    do passo 3 previu (log gerado, e a negação pro papel n1n2 quando a
+#    sensibilidade é administrativa).
 # ═══════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.skip(reason="rota de revelação de credencial: Fase 2")
-def test_revelar_credencial_gera_linha_em_segredo_acesso_log():
-    pass
+def _criar_credencial_direta(db_session, cliente, sensibilidade):
+    from clientes.cifra import cifrar
+    from clientes.models import Credencial
+    ct, nonce, versao = cifrar('segredo-d4')
+    c = Credencial(
+        cliente_id=cliente.id, escopo_tipo='cliente', sensibilidade=sensibilidade,
+        rotulo='Credencial D4', segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
+    )
+    db_session.session.add(c)
+    db_session.session.commit()
+    return c
 
 
-@pytest.mark.skip(reason="rota de revelação de credencial: Fase 2")
-def test_revelar_credencial_nega_para_n1n2():
-    pass
+def test_revelar_credencial_gera_linha_em_segredo_acesso_log(client, db_session, cliente):
+    from portal.models import SegredoAcessoLog
+    from clientes.models import Credencial
+
+    cred = _criar_credencial_direta(db_session, cliente, 'operacional')
+    usuario = criar_usuario(db_session, 'n3')
+    try:
+        token = fazer_token(email=usuario.email)
+        resp = client.post(
+            f'/clientes/credenciais/{cred.id}/revelar',
+            json={"motivo": "teste D4 — log gerado"},
+            headers={'Cf-Access-Jwt-Assertion': token},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()['segredo'] == 'segredo-d4'
+
+        log = SegredoAcessoLog.query.filter_by(credencial_id=cred.id).first()
+        assert log is not None
+        assert log.resultado == 'concedido'
+        assert log.motivo == 'teste D4 — log gerado'
+        assert log.usuario_id == usuario.id
+    finally:
+        db_session.session.delete(usuario)
+        Credencial.query.filter_by(id=cred.id).delete(synchronize_session=False)
+        db_session.session.commit()
+
+
+def test_revelar_credencial_nega_para_n1n2(client, db_session, cliente):
+    """
+    n1n2 tem clientes.credencial.operacional.revelar (passa o decorator),
+    mas não clientes.credencial.admin.revelar — a checagem de segunda
+    etapa dentro da rota nega quando sensibilidade='administrativa'
+    (Decisão 8, passo Fase 2)."""
+    from portal.models import SegredoAcessoLog
+    from clientes.models import Credencial
+
+    cred = _criar_credencial_direta(db_session, cliente, 'administrativa')
+    usuario = criar_usuario(db_session, 'n1n2')
+    try:
+        token = fazer_token(email=usuario.email)
+        resp = client.post(
+            f'/clientes/credenciais/{cred.id}/revelar',
+            json={"motivo": "teste D4 — nega n1n2"},
+            headers={'Cf-Access-Jwt-Assertion': token},
+        )
+        assert resp.status_code == 403
+        assert 'segredo' not in resp.get_json()
+
+        log = SegredoAcessoLog.query.filter_by(credencial_id=cred.id).first()
+        assert log is not None
+        assert log.resultado == 'negado'
+    finally:
+        db_session.session.delete(usuario)
+        Credencial.query.filter_by(id=cred.id).delete(synchronize_session=False)
+        db_session.session.commit()

@@ -1,7 +1,8 @@
 """
 tests/conftest.py
 Fixtures compartilhadas para os testes HTTP do módulo Clientes e Processos
-(tests/test_clientes_auth.py, tests/test_health_bypass.py).
+(tests/test_clientes_auth.py, tests/test_health_bypass.py,
+tests/test_clientes_credenciais.py).
 
 Não importa app.py — app.py carrega o Laudos inteiro (pandas, engine de
 classificação, upload de planilha, etc.), peso desnecessário pra testar só
@@ -18,9 +19,11 @@ env var, os testes que dependem de banco são pulados com motivo explícito
 em vez de falhar — não há uma verdade universal sobre onde rodar Postgres
 em CI.
 """
+import base64
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -30,6 +33,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 import jwt as pyjwt
+
+# Chave de teste para clientes/cifra.py — setdefault, não setenv: nenhum
+# outro arquivo de teste usa esta variável (ao contrário de
+# CF_ACCESS_AUD/CF_ACCESS_TEAM_DOMAIN, que test_auth.py também seta — ver
+# _mock_jwks abaixo), então não há risco de contaminação cruzada em
+# defini-la uma vez, no import, pra sessão inteira de testes.
+os.environ.setdefault('APP_ENCRYPTION_KEY', base64.b64encode(os.urandom(32)).decode())
 
 # ── Chave RSA sintética — mesmo padrão de tests/test_auth.py ────────────────
 _PRIVATE_KEY = rsa.generate_private_key(
@@ -149,3 +159,46 @@ def db_session(app):
     from extensoes import db
     with app.app_context():
         yield db
+
+
+@pytest.fixture()
+def cliente(db_session):
+    """
+    Cliente descartável para testes de ativo/credencial (Fase 2) — cnpj
+    único por execução (14 dígitos, dentro do CHECK ck_cliente_cnpj_
+    normalizado). Teardown apaga na ordem certa pra não bater em FK:
+    ativo_interface, depois ativo/credencial, só então cliente — nenhuma
+    dessas FKs tem ondelete='CASCADE' pra cliente_id (de propósito, ver
+    clientes/models.py: em produção um cliente não é apagado, então essa
+    cascata nunca precisaria disparar; aqui em teste, sem cascade, é o
+    teste que limpa na ordem certa à mão).
+    """
+    from clientes.models import Cliente, Ativo, AtivoInterface, Credencial
+
+    cnpj = str(uuid.uuid4().int)[:14].ljust(14, '0')
+    c = Cliente(razao_social=f"Cliente Teste {cnpj}", cnpj=cnpj)
+    db_session.session.add(c)
+    db_session.session.commit()
+    cliente_id = c.id
+    try:
+        yield c
+    finally:
+        ativo_ids = [a.id for a in Ativo.query.filter_by(cliente_id=cliente_id).all()]
+        if ativo_ids:
+            AtivoInterface.query.filter(AtivoInterface.ativo_id.in_(ativo_ids)).delete(synchronize_session=False)
+        Ativo.query.filter_by(cliente_id=cliente_id).delete(synchronize_session=False)
+        Credencial.query.filter_by(cliente_id=cliente_id).delete(synchronize_session=False)
+        Cliente.query.filter_by(id=cliente_id).delete(synchronize_session=False)
+        db_session.session.commit()
+
+
+def criar_usuario(db_session, papel, ativo=True, email=None):
+    """Helper (não fixture) — cria um Usuario descartável com o papel
+    pedido. O chamador é responsável por apagar no finally do próprio
+    teste (mesmo padrão já usado em tests/test_clientes_auth.py)."""
+    from portal.models import Usuario
+    email = email or f"{papel}-{uuid.uuid4().hex[:8]}@altcom.com.br"
+    u = Usuario(email=email, nome=f"Teste {papel}", papel=papel, ativo=ativo)
+    db_session.session.add(u)
+    db_session.session.commit()
+    return u
