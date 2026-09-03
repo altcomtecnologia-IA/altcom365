@@ -115,8 +115,8 @@ def parse_cpu(proc: str) -> tuple:
     """Retorna (familia, gen, suffix)"""
     p = str(proc).lower()
 
-    # AMD Ryzen: "Ryzen 5 5625U"
-    rm = re.search(r'ryzen\s+(\d)\s+(\d)\d{3}', p)
+    # AMD Ryzen: "Ryzen 5 5625U", "Ryzen 5 PRO 5650G"
+    rm = re.search(r'ryzen\s+(\d)\s+(?:pro\s+)?(\d)\d{3}', p)
     if rm:
         return f'ryzen{rm.group(1)}', int(rm.group(2)), ''
 
