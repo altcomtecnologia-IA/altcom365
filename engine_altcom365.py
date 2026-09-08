@@ -25,14 +25,12 @@ BADGE_COLORS = {
 # ══════════════════════════════════════════════════════════════════════════════
 TIER_TABLE = {
     # ── NOTEBOOK i3 ──────────────────────────────────────────────────────────
-    ('notebook','i3', 4): 0, ('notebook','i3', 5): 0, ('notebook','i3', 6): 0,  # gerações antigas
     ('notebook','i3', 7): 0, ('notebook','i3', 8): 0, ('notebook','i3', 9): 0,
     ('notebook','i3',10): 1,
     ('notebook','i3',11): 1,   # não listado → conservador = SATISFATÓRIO
     ('notebook','i3',12): 2, ('notebook','i3',13): 2,
 
     # ── NOTEBOOK i5 ──────────────────────────────────────────────────────────
-    ('notebook','i5', 4): 0, ('notebook','i5', 5): 0, ('notebook','i5', 6): 0,  # gerações antigas
     ('notebook','i5', 7): 0,
     ('notebook','i5', 8): 1, ('notebook','i5', 9): 1,
     ('notebook','i5',10): 2,
@@ -41,7 +39,6 @@ TIER_TABLE = {
     ('notebook','i5',13): 4,
 
     # ── NOTEBOOK i7 ──────────────────────────────────────────────────────────
-    ('notebook','i7', 4): 0, ('notebook','i7', 5): 0,  # gerações antigas
     ('notebook','i7', 6): 0,
     ('notebook','i7', 7): 1,
     ('notebook','i7', 8): 2,
@@ -51,7 +48,6 @@ TIER_TABLE = {
     ('notebook','i7',12): 4, ('notebook','i7',13): 4,
 
     # ── DESKTOP i3 ───────────────────────────────────────────────────────────
-    ('desktop','i3', 4): 0, ('desktop','i3', 5): 0, ('desktop','i3', 6): 0,  # gerações antigas
     ('desktop','i3', 7): 0,
     ('desktop','i3', 8): 1, ('desktop','i3', 9): 1,
     ('desktop','i3',10): 2, ('desktop','i3',11): 2,
@@ -59,7 +55,6 @@ TIER_TABLE = {
     ('desktop','i3',13): 4,
 
     # ── DESKTOP i5 ───────────────────────────────────────────────────────────
-    ('desktop','i5', 4): 0, ('desktop','i5', 5): 0,  # gerações antigas
     ('desktop','i5', 6): 0,
     ('desktop','i5', 7): 1, ('desktop','i5', 8): 1, ('desktop','i5', 9): 1,
     ('desktop','i5',10): 2,
@@ -67,7 +62,6 @@ TIER_TABLE = {
     ('desktop','i5',12): 4, ('desktop','i5',13): 4,
 
     # ── DESKTOP i7 ───────────────────────────────────────────────────────────
-    ('desktop','i7', 4): 0, ('desktop','i7', 5): 0,  # gerações antigas
     ('desktop','i7', 6): 0,
     ('desktop','i7', 7): 1,
     ('desktop','i7', 8): 2,
@@ -120,24 +114,9 @@ def parse_cpu(proc: str) -> tuple:
     if rm:
         return f'ryzen{rm.group(1)}', int(rm.group(2)), ''
 
-    # Intel N-series: distinguir Alder Lake 2023 (i3-N305) do antigo Atom/Celeron
-    # Novo: i3/i5/i7-N + 2-3 dígitos → moderno, comparável a 11ª/12ª gen
-    if re.search(r'i[3579]-n\d{2,3}\b', p):
-        return 'n-alder', 12, ''
-    # Antigo (Celeron/Pentium N): N4020, N5100, N6000, N3060 — 4 dígitos
-    if re.search(r'\bn\d{4}\b', p):
+    # Intel N-series (low-power)
+    if re.search(r'i3-n\d+|core.*\bn\d{3,4}\b', p):
         return 'n-series', 0, ''
-
-    # Intel Core novo naming (sem "i"): "Core 5 210H", "Core Ultra 7 150H", "Core(TM) 5 210H"
-    # Introduzido na 12ª/13ª geração em diante — sempre modernos e compatíveis com Win11.
-    # O (?:\([^)]+\))? tolera sufixos como (TM) ou (R) após "core".
-    cm = re.search(r'core(?:\([^)]+\))?\s+(ultra\s+)?([3579])\s+(\d{2,4})([a-z]*)', p)
-    if cm:
-        ultra   = bool(cm.group(1))           # True se "Ultra"
-        num     = cm.group(2)                 # '3', '5', '7', '9'
-        suffix  = cm.group(4)                 # 'h', 'u', 'p', etc.
-        familia = f'core-ultra-{num}' if ultra else f'core{num}'
-        return familia, 14, suffix            # gen=14 como piso seguro (sempre moderno)
 
     # Gen tag explícita: "11th Gen ... i5-1135G7"
     gm = re.search(r'(\d+)(?:th|nd|rd|st)\s+gen.*?i([3579])-(\d{3,5})([a-z]*)', p)
@@ -164,14 +143,8 @@ def base_tier(dev: str, proc: str) -> int:
     if familia.startswith('ryzen'):
         return 3 if gen >= 5 else 2
 
-    # Intel N-series Alder Lake (i3-N305, 2023+) = ÓTIMO (tier 3)
-    if familia == 'n-alder': return 3
-    # Intel N-series antigo (Atom/Celeron) = CRÍTICO
+    # Intel N-series = CRÍTICO
     if familia == 'n-series': return 0
-
-    # Intel Core novo naming (Core 5/7/3/9, Core Ultra) — sempre BOM ou ÓTIMO
-    if familia.startswith('core'):
-        return 4 if 'ultra' in familia else 3
 
     if familia == 'unknown' or gen == 0: return 0
 
@@ -187,24 +160,17 @@ def base_tier(dev: str, proc: str) -> int:
 def classify(row) -> pd.Series:
     proc    = str(row['Processador'])
     ram     = parse_ram(row['Memória RAM total'])
-    storage = parse_storage(row['Armazenamento total'])
-    uso     = parse_uso(row['Armazenamento utilizado'])
+    storage = parse_storage(row.get('Armazenamento total', row.get('Armazenamento interno total', 0)))
+    uso     = parse_uso(row.get('Armazenamento utilizado', row.get('Armazenamento interno utilizado', None)))
     so      = str(row['Sistema operacional'])
-
-    # Guarda: dados essenciais ausentes → CRÍTICO com descritivo específico
-    _proc_vazio = proc.strip().lower() in ('', 'nan', 'não possui', 'nao possui', 'none')
-    if _proc_vazio or ram == 0 or storage == 0:
-        return pd.Series({
-            'Classificação':         'CRÍTICO',
-            'Badge':                 'CRÍTICO',
-            'Descritivo':            'Dados indisponíveis — máquina requer revisão técnica. '
-                                     'Possível agente Milvus corrompido ou hardware quebrado.',
-            'Durabilidade estimada': 'Troca',
-            'Sugestão':              'Verificar conectividade do agente Milvus e estado físico da máquina.',
-            'Preços':                '',
-        })
     tipo    = device_type(str(row.get('Tipo de dispositivo', 'notebook')))
-    win_old = is_win_old(so)
+
+    # Usa flag booleana do Milvus se disponível; fallback para parse de string
+    _so_flag = row.get('Sistema operacional desatualizado', None)
+    if _so_flag is not None and not (isinstance(_so_flag, float) and pd.isna(_so_flag)):
+        win_old = str(_so_flag).strip().lower() in ('sim', 'yes', 'true', '1', 'verdadeiro')
+    else:
+        win_old = is_win_old(so)
     familia, gen, suffix = parse_cpu(proc)
 
     tier_base_val = base_tier(tipo, proc)
@@ -234,13 +200,12 @@ def classify(row) -> pd.Series:
             'Preços':                PRECO_SUBST,
         })
 
-    # ── Requisito EXCELENTE: 16GB + SSD>=460 → se não atingir, rebaixa tier ─
-    # 460 GB acomoda SSDs de 480 GB/500 GB que reportam ~475 GB formatados.
-    if tier == 4 and (ram < 16 or storage < 460):
+    # ── Requisito EXCELENTE: 16GB + SSD>=480 → se não atingir, rebaixa tier ─
+    if tier == 4 and (ram < 16 or storage < 480):
         tier = 3   # rebaixa para ÓTIMO (permanente — não promove de volta)
 
-    # ── Promoção ÓTIMO→EXCELENTE por RAM: só se tier BASE era 3 e SSD≥460 ──
-    if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16 and storage >= 460:
+    # ── Promoção ÓTIMO→EXCELENTE por RAM: só se tier BASE era 3 ─────────────
+    if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16:
         tier = 4
 
     # ── Classificação base final (tier não muda mais após aqui) ──────────────
