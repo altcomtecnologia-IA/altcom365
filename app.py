@@ -1,6 +1,6 @@
 """
 Altcom 365 v2 — Backend Flask
-Suporta upload do Relatório Milvus Completo (todos os clientes)
+Suporta upload do Relatório Milvus Completo (todos os clientes)h
 e geração de laudos em ZIP.
 
 V11: PostgreSQL + SQLAlchemy + Flask-Migrate + APScheduler
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
 from engine_servidores import classify_servidor, BADGE_COLORS as BADGE_COLORS_SRV
 from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
-                                normalize_df, is_new_format)
+                                normalize_df, normalize_df_servidores, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
 import pandas as pd
@@ -1075,6 +1075,7 @@ def upload_servidores():
 
         # Normaliza nomes de coluna (remove espaços extras)
         df.columns = [c.strip() for c in df.columns]
+        df = normalize_df_servidores(df)
 
         # Valida colunas mínimas
         faltando = [c for c in COLUNAS_OBRIGATORIAS_SRV if c not in df.columns]
