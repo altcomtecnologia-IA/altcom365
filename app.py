@@ -11,6 +11,7 @@ from flask import Flask, request, send_file, jsonify, render_template, session
 
 sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
+from engine_servidores import classify_servidor, BADGE_COLORS as BADGE_COLORS_SRV
 from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
                                 normalize_df, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
@@ -70,6 +71,13 @@ COLUNAS_OBRIGATORIAS = [
     'ARMAZENAMENTO INTERNO TOTAL', 'ARMAZENAMENTO INTERNO UTILIZADO',
     'ARMAZENAMENTO INTERNO DISPONÍVEL', 'VERSÃO DO CLIENT',
     'APELIDO', 'USUÁRIO LOGADO', 'EXCLUÍDO', 'NOME FANTASIA DO CLIENTE',
+]
+
+# Colunas obrigatórias para o relatório de servidores (Milvus — Tabela de Dispositivos)
+COLUNAS_OBRIGATORIAS_SRV = [
+    'Nome do dispositivo', 'Processador', 'Sistema operacional',
+    'Memória RAM total', 'Armazenamento interno total',
+    'Nome fantasia do cliente',
 ]
 
 # ── Helpers de sessão ─────────────────────────────────────────────────────────
@@ -1027,3 +1035,214 @@ def download_relatorio_consolidado():
         logger.exception('download_relatorio_consolidado: erro inesperado')
         return jsonify({'erro': f'Erro inesperado: {str(e)}'}), 500
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LAUDO DE SERVIDORES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/servidores')
+@requer("laudo:ler")
+def servidores_home():
+    """Página do Laudo de Eficiência de Servidores."""
+    return render_template('servidores.html')
+
+
+@app.route('/upload-servidores', methods=['POST'])
+@requer("laudo:ler")
+def upload_servidores():
+    """
+    Recebe o relatório Milvus de servidores (Tabela de Dispositivos filtrada
+    para SERVIDOR = Sim no Milvus).
+    Aplica classify_servidor e salva os resultados em sessão.
+    Retorna resumo de classificações e lista de clientes.
+    """
+    _clear_old_sessions()
+
+    if 'arquivo' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
+    f = request.files['arquivo']
+    if not f.filename or not allowed_file(f.filename):
+        return jsonify({'erro': 'Formato inválido. Envie um arquivo .xlsx'}), 400
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            f.save(tmp.name)
+            tmp_path = tmp.name
+
+        df = pd.read_excel(tmp_path)
+
+        # Normaliza nomes de coluna (remove espaços extras)
+        df.columns = [c.strip() for c in df.columns]
+
+        # Valida colunas mínimas
+        faltando = [c for c in COLUNAS_OBRIGATORIAS_SRV if c not in df.columns]
+        if faltando:
+            return jsonify({'erro': f'Colunas ausentes: {", ".join(faltando)}'}), 400
+
+        # Filtra excluídos
+        if 'Excluído' in df.columns:
+            df = df[df['Excluído'].astype(str).str.upper() != 'SIM']
+        df = df.reset_index(drop=True)
+
+        total = len(df)
+        if total == 0:
+            return jsonify({'erro': 'Nenhum servidor encontrado após filtros.'}), 400
+
+        # Aplica engine de servidores
+        results = df.apply(classify_servidor, axis=1)
+        df_out  = pd.concat([df.reset_index(drop=True),
+                             results.reset_index(drop=True)], axis=1)
+
+        # Resumo de classificações
+        order  = ['EXCELENTE', 'ÓTIMO', 'BOM', 'SATISFATÓRIO', 'CRÍTICO']
+        resumo = []
+        for cat in order:
+            qtd = int((df_out['Classificação'] == cat).sum())
+            if qtd == 0:
+                continue
+            mask     = df_out['Classificação'] == cat
+            eol_n    = int(df_out.loc[mask, 'Badge'].str.contains('EOL').sum())
+            sob_n    = int(df_out.loc[mask, 'Badge'].str.contains('Sobrecarga').sum())
+            bg, fg   = BADGE_COLORS_SRV[cat]
+            resumo.append({
+                'label': cat, 'qtd': qtd,
+                'pct': round(qtd / total * 100),
+                'eol': eol_n, 'sobrecarga': sob_n,
+                'bg': bg, 'fg': fg,
+            })
+
+        clientes = sorted(df_out['Nome fantasia do cliente'].dropna().unique().tolist())
+
+        # Salva sessão
+        sess_data = {
+            'df_srv':    df_out,
+            'timestamp': datetime.now(),
+        }
+        sid = _save_session(sess_data)
+        session['sess_id_srv'] = sid
+
+        return jsonify({
+            'total':    total,
+            'clientes': clientes,
+            'resumo':   resumo,
+        })
+
+    except Exception as e:
+        logger.exception('upload_servidores: erro')
+        return jsonify({'erro': f'Erro ao processar arquivo: {str(e)}'}), 500
+    finally:
+        if tmp_path:
+            try: os.unlink(tmp_path)
+            except: pass
+
+
+@app.route('/baixar-laudo-servidores', methods=['POST'])
+@requer("laudo:ler")
+def baixar_laudo_servidores():
+    """
+    Gera e baixa o Excel do Laudo de Eficiência de Servidores.
+    Filtra por clientes selecionados (opcional — sem filtro = todos).
+    """
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    data         = request.get_json(force=True, silent=True) or {}
+    clientes_sel = data.get('clientes', [])
+
+    sid = session.get('sess_id_srv')
+    if not sid:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+    sess_data = _load_session(sid)
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df_out = sess_data['df_srv']
+    if clientes_sel:
+        df_out = df_out[df_out['Nome fantasia do cliente'].isin(clientes_sel)]
+
+    if df_out.empty:
+        return jsonify({'erro': 'Nenhum servidor encontrado para os clientes selecionados.'}), 400
+
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Laudo de Servidores'
+
+        # ── Cabeçalho ────────────────────────────────────────────
+        COLUNAS_SAIDA = [
+            'Nome do dispositivo', 'Nome fantasia do cliente',
+            'Máquina virtual', 'É VM',
+            'Processador', 'Núcleos do processador',
+            'Memória RAM total', 'Memória RAM utilizada',
+            'CPU utilizada',
+            'Armazenamento interno total', 'Armazenamento interno utilizado',
+            'Sistema operacional',
+            'Antivírus',
+            'Número do serial', 'Modelo',
+            'Localização',
+            'Badge', 'Classificação', 'Descritivo',
+            'Durabilidade estimada', 'Sugestão',
+        ]
+        # Filtra colunas que realmente existem no df
+        colunas_presentes = [c for c in COLUNAS_SAIDA if c in df_out.columns]
+
+        header_fill = PatternFill('solid', fgColor='1F3864')
+        header_font = Font(bold=True, color='FFFFFF', size=10)
+        center      = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin        = Side(style='thin', color='CCCCCC')
+        border      = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        for ci, col in enumerate(colunas_presentes, 1):
+            cell            = ws.cell(row=1, column=ci, value=col)
+            cell.fill       = header_fill
+            cell.font       = header_font
+            cell.alignment  = center
+            cell.border     = border
+
+        ws.row_dimensions[1].height = 30
+
+        # ── Linhas de dados ───────────────────────────────────────
+        for ri, (_, row) in enumerate(df_out[colunas_presentes].iterrows(), 2):
+            classif = str(row.get('Classificação', ''))
+            bg, fg  = BADGE_COLORS_SRV.get(classif, ('FFFFFF', '000000'))
+
+            for ci, col in enumerate(colunas_presentes, 1):
+                val  = row.get(col, '')
+                cell = ws.cell(row=ri, column=ci, value=str(val) if pd.notna(val) else '')
+                cell.border    = border
+                cell.alignment = Alignment(vertical='center', wrap_text=True)
+
+                # Colorir coluna Badge
+                if col == 'Badge':
+                    cell.fill = PatternFill('solid', fgColor=bg)
+                    cell.font = Font(bold=True, color=fg, size=10)
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        # ── Larguras de coluna ────────────────────────────────────
+        LARGURAS = {
+            'Nome do dispositivo': 22, 'Nome fantasia do cliente': 22,
+            'Processador': 35, 'Sistema operacional': 28,
+            'Badge': 20, 'Descritivo': 45, 'Sugestão': 35,
+            'Durabilidade estimada': 22,
+        }
+        for ci, col in enumerate(colunas_presentes, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = LARGURAS.get(col, 16)
+
+        ws.freeze_panes = 'A2'
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='Laudo_Eficiencia_Servidores_Altcom365.xlsx',
+        )
+
+    except Exception as e:
+        logger.exception('baixar_laudo_servidores: erro')
+        return jsonify({'erro': f'Erro ao gerar laudo: {str(e)}'}), 500
