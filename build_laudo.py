@@ -40,6 +40,8 @@ COL_MAP_NOVO = {
     'USUÁRIO LOGADO':              'Usuário logado',
     'DATA DE ATUALIZAÇÃO':         'Data de atualização',
     'VERSÃO DO CLIENT':            'Versão do client',
+    'MODELO':                      'Modelo',
+    'NÚMERO DO SERIAL':             'Número do serial',
 }
 
 # -- Frases que NÃO aparecem no laudo do cliente -------------------------------
@@ -116,6 +118,53 @@ def normalize_df(df):
             df[col] = (df[col].astype(str)
                        .replace({'nan': '', 'None': '', 'Não possui': '', 'NaN': ''}))
 
+    return df
+
+COL_MAP_SERVIDORES = {
+    'NOME DO DISPOSITIVO':              'Nome do dispositivo',
+    'TIPO DO DISPOSITIVO':              'Tipo de dispositivo',
+    'SISTEMA OPERACIONAL':              'Sistema operacional',
+    'VERSÃO DA BUILD DO SISTEMA OPERACIONAL': 'Versão da Build do Sistema Operacional',
+    'SISTEMA OPERACIONAL DESATUALIZADO':'Sistema operacional desatualizado',
+    'PROCESSADOR':                      'Processador',
+    'NÚCLEOS DO PROCESSADOR':           'Núcleos do processador',
+    'CPU UTILIZADA':                    'CPU utilizada',
+    'TEMPERATURA DA CPU':               'Temperatura da CPU',
+    'MEMÓRIA RAM TOTAL':                'Memória RAM total',
+    'MEMÓRIA RAM UTILIZADA':            'Memória RAM utilizada',
+    'ARMAZENAMENTO INTERNO TOTAL':      'Armazenamento interno total',
+    'ARMAZENAMENTO INTERNO UTILIZADO':  'Armazenamento interno utilizado',
+    'ARMAZENAMENTO INTERNO DISPONÍVEL': 'Armazenamento interno disponível',
+    'ANTIVÍRUS':                        'Antivírus',
+    'LOCALIZAÇÃO':                      'Localização',
+    'DATA DE COMPRA':                   'Data de compra',
+    'DATA DE GARANTIA':                 'Data de garantia',
+    'UPTIME (TEMPO DE ATIVIDADE)':      'Uptime (tempo de atividade)',
+    'NOME FANTASIA DO CLIENTE':         'Nome fantasia do cliente',
+    'MÁQUINA VIRTUAL':                  'Máquina virtual',
+    'SERVIDOR':                         'Servidor',
+    'MODELO':                           'Modelo',
+    'NÚMERO DO SERIAL':                 'Número do serial',
+    'EXCLUÍDO':                         'Excluído',
+    'DATA DE ATUALIZAÇÃO':              'Data de atualização',
+}
+
+COLUNAS_OBRIGATORIAS_SERVIDORES = [
+    'Nome do dispositivo', 'Processador', 'Sistema operacional',
+    'Memória RAM total', 'Armazenamento interno total', 'Nome fantasia do cliente',
+]
+
+
+def normalize_df_servidores(df):
+    """
+    Converte export UPPERCASE do Laudo Servidores (Milvus) para as colunas
+    que o engine_servidores.classify_servidor espera.
+    Preserva "interno" nos nomes de armazenamento (diferença chave vs normalize_df).
+    """
+    if not is_new_format(df):
+        return df
+    df = df.copy()
+    df = df.rename(columns=COL_MAP_SERVIDORES)
     return df
 
 
@@ -268,7 +317,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 
     # -- ABA 1: LAUDO ---------------------------------------------------------
     ws = wb.active; ws.title = "Laudo"
-    NCOLS = 14
+    NCOLS = 15
 
     title_strip(ws, 1, f"LAUDO DE EFICIÊNCIA TÉCNICA  |  {cliente_nome.upper()}", NCOLS)
     ws.row_dimensions[2].height = 18
@@ -278,8 +327,8 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
-    HEADERS = ['Tipo', 'Dispositivo', 'Apelido', 'Usuário Logado', 'S.O.',
-               'Processador', 'Núcleos', 'RAM', 'Armazenamento', 'Uso %',
+    HEADERS = ['Tipo', 'Dispositivo', 'Modelo', 'Nº Serial', 'Apelido', 'Usuário Logado',
+               'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Classificação', 'Descritivo', 'Durabilidade', 'Sugestão']
     ws.row_dimensions[4].height = 22
     for ci, h in enumerate(HEADERS, 1):
@@ -303,15 +352,18 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         dur_raw      = str(row.get('Durabilidade estimada', ''))
         apelido      = str(row.get('Apelido', '')) or '—'
         usuario      = str(row.get('Usuário logado', '')) or '—'
+        modelo       = str(row.get('Modelo', '')) or '—'
+        serial       = str(row.get('Número do serial', '')) or '—'
 
         vals = [
             (tipo_label,                            'center'),
             (str(row.get('Nome do dispositivo', '')), 'left'),
+            (modelo,  'left'),
+            (serial,  'left'),
             (apelido,                                'left'),
             (usuario,                                'left'),
             (str(row.get('Sistema operacional', '')), 'left'),
             (str(row.get('Processador', '')),          'left'),
-            (str(row.get('Núcleos do processador', '')), 'center'),
             (str(row.get('Memória RAM total', '')),    'center'),
             (st_s,    'center'),
             (uso_s,   'center'),
@@ -322,7 +374,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         ]
 
         for ci, (v, ha) in enumerate(vals, 1):
-            if ci == 11:  # Classificação — badge colorido
+            if ci == 12:  # Classificação — badge colorido
                 c = ws.cell(row=r, column=ci, value=v)
                 fill, font = badge_style(classif_base)
                 c.fill = fill; c.font = font
@@ -331,7 +383,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
             else:
                 dat(ws, r, ci, v, z=z, ha=ha)
 
-    for i, w in enumerate([10, 20, 16, 16, 26, 36, 8, 8, 14, 7, 20, 50, 12, 30], 1):
+    for i, w in enumerate([10, 20, 18, 16, 14, 16, 26, 36, 8, 14, 7, 20, 50, 12, 30], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
 
