@@ -493,7 +493,7 @@ def _parse_ram_pct(row):
         ram_total_mb = float(m.group(1).replace(',', '.')) * 1024
         if ram_total_mb <= 0:
             return None
-        return (ram_util_mb / ram_total_mb) * 100
+        return min((ram_util_mb / ram_total_mb) * 100, 100.0)
     except Exception:
         return None
 
