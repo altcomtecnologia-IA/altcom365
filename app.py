@@ -1147,6 +1147,15 @@ def upload_servidores():
         df.columns = [c.strip() for c in df.columns]
         df = normalize_df_servidores(df)
 
+        # Coluna 'Sem contato' — sem resposta há mais de 7 dias
+        if 'Data de atualização' in df.columns:
+            _hoje = pd.Timestamp.now().normalize()
+            df['Sem contato'] = pd.to_datetime(
+                df['Data de atualização'], dayfirst=True, errors='coerce'
+            ).apply(lambda d: True if pd.isna(d) else (_hoje - d).days > 7)
+        else:
+            df['Sem contato'] = False
+
         # Valida colunas mínimas
         faltando = [c for c in COLUNAS_OBRIGATORIAS_SRV if c not in df.columns]
         if faltando:
@@ -1256,6 +1265,7 @@ def baixar_laudo_servidores():
             'Localização',
             'Badge', 'Classificação', 'Descritivo',
             'Durabilidade estimada', 'Sugestão',
+            'Versão do client', 'Sem contato',
         ]
         # Filtra colunas que realmente existem no df
         colunas_presentes = [c for c in COLUNAS_SAIDA if c in df_out.columns]
