@@ -1147,12 +1147,12 @@ def upload_servidores():
         df.columns = [c.strip() for c in df.columns]
         df = normalize_df_servidores(df)
 
-        # Coluna 'Sem contato' — sem resposta há mais de 7 dias
+        # Coluna 'Sem contato' — sem resposta há mais de 2 dias
         if 'Data de atualização' in df.columns:
             _hoje = pd.Timestamp.now().normalize()
             df['Sem contato'] = pd.to_datetime(
                 df['Data de atualização'], dayfirst=True, errors='coerce'
-            ).apply(lambda d: 'Sem contato' if (pd.isna(d) or (_hoje - d).days > 7) else '')
+            ).apply(lambda d: 'Sem contato' if (pd.isna(d) or (_hoje - d).days > 2) else '')
         else:
             df['Sem contato'] = False
 
