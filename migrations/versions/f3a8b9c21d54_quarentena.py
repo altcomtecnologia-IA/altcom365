@@ -1,7 +1,7 @@
 """quarentena: historico de dispositivos em acompanhamento comercial
 
 Revision ID: f3a8b9c21d54
-Revises: ec4549622c1d
+Revises: 91b122f37431
 Create Date: 2026-09-09
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = 'f3a8b9c21d54'
-down_revision = 'ec4549622c1d'
+down_revision = '91b122f37431'
 branch_labels = None
 depends_on = None
 
