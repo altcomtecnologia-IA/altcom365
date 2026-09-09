@@ -540,7 +540,16 @@ function renderTab(cli, idx){
       </div>
     </div>
 
-    <!-- History -->
+    
+<!-- Em acompanhamento -->
+<div class="history-section" id="qlist-${safeId}">
+<div class="history-title">🔒 Em acompanhamento</div>
+<div id="qlist-body-${idx}" class="history-list">
+<p class="history-empty">Carregando…</p>
+</div>
+</div>
+
+<!-- History -->
     <div class="history-section" id="history-${safeId}">
       <div class="history-title">Histórico de processamentos</div>
       <div class="history-list" id="history-list-${safeId}">
@@ -765,6 +774,7 @@ async function init(){
     // Load first tab's history
     _historyLoaded[0] = true;
     loadHistory(0);
+loadQuarentenas();
 
     // Show main content
     document.getElementById('loading-screen').style.display='none';
@@ -953,6 +963,43 @@ function fecharFiltroPainel(){
   document.getElementById('painel-filtrado').classList.remove('aberto');
 }
 
+async function loadQuarentenas(){
+try{
+const r=await fetch('/quarentena/ativas');
+const data=await r.json();
+const ativas=data.ativas||[];
+const byCliente={};
+ativas.forEach(q=>{if(!byCliente[q.cliente])byCliente[q.cliente]=[];byCliente[q.cliente].push(q);});
+_clientNames.forEach((nome,idx)=>{
+const el=document.getElementById('qlist-body-'+idx);
+if(!el)return;
+const items=byCliente[nome]||[];
+if(!items.length){el.innerHTML='<p class="history-empty">Nenhum dispositivo em acompanhamento.</p>';return;}
+el.innerHTML=items.map(q=>`
+<div class="history-item">
+<span class="history-date">🔒 ${escHtml(q.dispositivo)}</span>
+<div class="history-stats">
+<span class="hstat hstat-total">Motivo: ${escHtml(q.motivo)}</span>
+${q.acao_tomada?'<span class="hstat hstat-total">A\u00e7\u00e3o: '+escHtml(q.acao_tomada)+'</span>':''}
+<span class="hstat hstat-critico">Expira: ${escHtml(q.expira_em)}</span>
+${q.adicionado_por?'<span class="hstat hstat-total">Por: '+escHtml(q.adicionado_por)+'</span>':''}
+</div>
+<button onclick="liberarQuarentena('${escHtml(q.id)}')"
+style="padding:4px 10px;border-radius:5px;border:1px solid #5a3a3a;background:rgba(180,0,0,.2);color:#ff9999;font-size:11px;cursor:pointer">
+🔓 Liberar
+</button>
+</div>`).join('');
+});
+}catch(e){console.error('loadQuarentenas:',e);}
+}
+async function liberarQuarentena(qid){
+if(!confirm('Liberar este dispositivo da quarentena?'))return;
+try{
+const r=await fetch('/quarentenar/'+qid+'/liberar',{method:'POST'});
+if(!r.ok)throw new Error(await r.text());
+location.reload();
+}catch(e){alert('Erro: '+e.message);}
+}
 document.addEventListener('DOMContentLoaded', init);
 function abrirModalQ(btn){
   const host=btn.dataset.host, cli=btn.dataset.cliente;
@@ -983,7 +1030,7 @@ async function confirmarQuarentena(){
     });
     if(!r.ok)throw new Error(await r.text());
     fecharModalQ();
-    alert('Dispositivo colocado em quarentena por 30 dias.');
+    location.reload();
   }catch(e){
     alert('Erro: '+e.message);
     btn.disabled=false; btn.textContent='Confirmar';
