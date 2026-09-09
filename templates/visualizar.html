@@ -86,6 +86,8 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 .btn-dl-laudo:hover{background:#154360}
 .btn-dl-interno{background:#1A4A2E;color:#A9DFBF}
 .btn-dl-interno:hover{background:#145A32}
+.btn-dl-desempenho{background:#6E2F8A;color:#E8DAEF}
+.btn-dl-desempenho:hover{background:#5B2576}
 .btn-dl:disabled{opacity:.4;cursor:not-allowed}
 
 /* ── Vista Resumo ── */
@@ -259,6 +261,11 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
         <span id="total-geral-label"></span>
         <span class="versao-ref" id="versao-ref-label" style="display:none"></span>
       </div>
+      <button class="btn-dl btn-dl-desempenho" id="btn-desempenho"
+              onclick="baixarDesempenho()" style="display:none;padding:8px 14px;font-size:12px"
+              title="Todos os clientes — dispositivos com RAM ou CPU > 90%">
+        📊 Relatório de Desempenho
+      </button>
       <button class="btn-dl btn-dl-interno" id="btn-consolidado"
               onclick="baixarConsolidado()" style="display:none;padding:8px 14px;font-size:12px">
         ⬇ Todos Rel. Internos
@@ -639,6 +646,26 @@ function downloadDoc(tipo, nome){
   .catch(e=>alert('Erro no download: '+e.message));
 }
 
+// ── Relatório de Desempenho ───────────────────────────────────────────────────
+async function baixarDesempenho() {
+  const btn = document.getElementById('btn-desempenho');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando…';
+  try {
+    const resp = await fetch('/baixar-relatorio-desempenho', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}',
+    });
+    if (!resp.ok) { const e = await resp.json(); alert(e.erro || 'Erro'); return; }
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Relatorio_Desempenho_Altcom365.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { alert('Erro ao baixar: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = orig; }
+}
+
 // ── Initial load ──────────────────────────────────────────────────────────────
 async function init(){
   try {
@@ -671,6 +698,8 @@ async function init(){
       vEl.style.display='';
     }
     document.getElementById('header-meta').style.display='';
+    const btnDesemp = document.getElementById('btn-desempenho');
+    if (btnDesemp) btnDesemp.style.display = '';
     const btnCons = document.getElementById('btn-consolidado');
     if (btnCons) btnCons.style.display = '';
 
