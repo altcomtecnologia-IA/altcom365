@@ -96,7 +96,7 @@ def _parse_ram_uso_pct(ram_util_val, ram_total_val) -> float:
         ram_total_gb = float(m.group(1).replace(',', '.'))
         if ram_total_gb <= 0:
             return 0.0
-        return (ram_util_mb / (ram_total_gb * 1024)) * 100
+        return min((ram_util_mb / (ram_total_gb * 1024)) * 100, 100.0)
     except Exception:
         return 0.0
 
