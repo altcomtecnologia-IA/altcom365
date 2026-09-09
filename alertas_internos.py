@@ -168,7 +168,37 @@ def calcular_alertas(df, versao_ref=None):
     df   = df.copy()
     hoje = pd.Timestamp.today()
 
-    # 1. Uso de armazenamento (> 70%)
+    # -- Helpers RAM/CPU (UPPERCASE - antes do normalize_df) ----------------
+    def _ram_pct_raw(row):
+        """% de uso de RAM. Suporta MB bruto ou string percentual."""
+        import re as _re
+        v = row.get('MEMÓRIA RAM UTILIZADA')
+        if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+            return None
+        s = str(v).strip()
+        try:
+            if '%' in s:
+                return float(s.replace('%', '').replace(',', '.').strip())
+            util_mb = float(s.replace(',', '.'))
+            m = _re.search(r'([\d,\.]+)', str(row.get('MEMÓRIA RAM TOTAL', '') or ''))
+            if not m:
+                return None
+            total_mb = float(m.group(1).replace(',', '.')) * 1024
+            return (util_mb / total_mb * 100) if total_mb > 0 else None
+        except Exception:
+            return None
+
+    def _cpu_pct_raw(row):
+        """% de uso de CPU."""
+        v = row.get('CPU UTILIZADA')
+        if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+            return None
+        try:
+            return float(str(v).replace('%', '').replace(',', '.').strip())
+        except Exception:
+            return None
+
+    # 1. Uso de armazenamento (> 90%)
     def _uso_pct(row):
         total = _parse_gb(row.get('ARMAZENAMENTO INTERNO TOTAL'))
         if not total or total <= 0:
@@ -183,7 +213,7 @@ def calcular_alertas(df, versao_ref=None):
 
     df['_uso_pct'] = df.apply(_uso_pct, axis=1)
     df['_alerta_armazenamento'] = df['_uso_pct'].apply(
-        lambda u: f"Preventiva -- uso {u:.1f}%" if (u is not None and u > 70) else ""
+        lambda u: f"Preventiva -- uso {u:.1f}%" if (u is not None and u > 90) else ""
     )
 
     # 2. Windows desatualizado — só máquinas com CPU compatível com Win11
@@ -249,12 +279,30 @@ def calcular_alertas(df, versao_ref=None):
     else:
         df['_alerta_milvus'] = ""
 
+    # 5. RAM e CPU em alerta (> 90%)
+    df['_alerta_ram'] = df.apply(
+        lambda row: (
+            f"RAM em alerta ({_ram_pct_raw(row):.0f}%)"
+            if _ram_pct_raw(row) is not None and _ram_pct_raw(row) > 90
+            else ""
+        ), axis=1
+    )
+    df['_alerta_cpu'] = df.apply(
+        lambda row: (
+            f"CPU em alerta ({_cpu_pct_raw(row):.0f}%)"
+            if _cpu_pct_raw(row) is not None and _cpu_pct_raw(row) > 90
+            else ""
+        ), axis=1
+    )
+
     # Flag geral
     df['_tem_alerta'] = (
         (df['_alerta_armazenamento'].str.len() > 0) |
         (df['_alerta_windows'].str.len()       > 0) |
         (df['_alerta_sem_contato'].str.len()   > 0) |
-        (df['_alerta_milvus'].str.len()        > 0)
+        (df['_alerta_milvus'].str.len()        > 0) |
+        (df['_alerta_ram'].str.len()           > 0) |
+        (df['_alerta_cpu'].str.len()           > 0)
     )
     return df
 
@@ -301,6 +349,8 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
     n_win     = int(((df_a['_alerta_windows'].str.len()       > 0) & mask_nao_critico).sum())
     n_contato = int(((df_a['_alerta_sem_contato'].str.len()   > 0) & mask_nao_critico).sum())
     n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
+    n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
     n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
 
     milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
@@ -319,6 +369,8 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
             'sem_contato':    n_contato,
             'milvus':         n_milvus,
             'laudados_troca': n_troca,
+            'ram_alerta':     n_ram,
+            'cpu_alerta':     n_cpu,
             'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
             'tem_versao':     versao_ref is not None,
         },
