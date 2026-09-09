@@ -1152,7 +1152,7 @@ def upload_servidores():
             _hoje = pd.Timestamp.now().normalize()
             df['Sem contato'] = pd.to_datetime(
                 df['Data de atualização'], dayfirst=True, errors='coerce'
-            ).apply(lambda d: True if pd.isna(d) else (_hoje - d).days > 7)
+            ).apply(lambda d: 'Sem contato' if (pd.isna(d) or (_hoje - d).days > 7) else '')
         else:
             df['Sem contato'] = False
 
@@ -1247,6 +1247,11 @@ def baixar_laudo_servidores():
         return jsonify({'erro': 'Nenhum servidor encontrado para os clientes selecionados.'}), 400
 
     try:
+        # Badge → Classificação (cabeçalho Excel)
+        df_out = df_out.copy()
+        if 'Badge' in df_out.columns:
+            df_out.rename(columns={'Badge': 'Classificação', 'Classificação': '_cl_base'}, inplace=True)
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Laudo de Servidores'
@@ -1263,7 +1268,7 @@ def baixar_laudo_servidores():
             'Antivírus',
             'Número do serial', 'Modelo',
             'Localização',
-            'Badge', 'Classificação', 'Descritivo',
+            'Classificação', 'Descritivo',
             'Durabilidade estimada', 'Sugestão',
             'Versão do client', 'Sem contato',
         ]
