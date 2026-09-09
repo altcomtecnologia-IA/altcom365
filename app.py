@@ -1152,7 +1152,7 @@ def upload_servidores():
             _hoje = pd.Timestamp.now().normalize()
             df['Sem contato'] = pd.to_datetime(
                 df['Data de atualização'], dayfirst=True, errors='coerce'
-            ).apply(lambda d: 'Sem contato' if (pd.isna(d) or (_hoje - d).days > 2) else '')
+            ).apply(lambda d: 'Alerta 2 dias sem contato' if (pd.isna(d) or (_hoje - d).days > 2) else '')
         else:
             df['Sem contato'] = False
 
