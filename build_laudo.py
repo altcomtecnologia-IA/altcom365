@@ -42,6 +42,9 @@ COL_MAP_NOVO = {
     'VERSÃO DO CLIENT':            'Versão do client',
     'MODELO':                      'Modelo',
     'NÚMERO DO SERIAL':             'Número do serial',
+    'PLACA MÃE':                   'Placa mãe',
+    'CPU UTILIZADA':               'CPU utilizada',
+    'MEMÓRIA RAM UTILIZADA':       'Memória RAM utilizada',
 }
 
 # -- Frases que NÃO aparecem no laudo do cliente -------------------------------
@@ -60,6 +63,7 @@ ALERT_COLORS = {
     'sem_contato':   ("D4E8F8", "2874A6"),
     'milvus':        ("ECEFF1", "5D6D7E"),
     'troca':         ("F9E6E6", "922B21"),
+    'gargalo':       ("FFE5CC", "B7500A"),
 }
 
 
@@ -327,7 +331,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
-    HEADERS = ['Tipo', 'Dispositivo', 'Modelo', 'Nº Serial', 'Apelido', 'Usuário Logado',
+    HEADERS = ['Tipo', 'Dispositivo', 'Marca', 'Nº Serial', 'Apelido', 'Usuário Logado',
                'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Classificação', 'Descritivo', 'Durabilidade', 'Sugestão']
     ws.row_dimensions[4].height = 22
@@ -352,13 +356,13 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         dur_raw      = str(row.get('Durabilidade estimada', ''))
         apelido      = str(row.get('Apelido', '')) or '—'
         usuario      = str(row.get('Usuário logado', '')) or '—'
-        modelo       = str(row.get('Modelo', '')) or '—'
+        marca        = str(row.get('Placa mãe', '')) or '—'
         serial       = str(row.get('Número do serial', '')) or '—'
 
         vals = [
             (tipo_label,                            'center'),
             (str(row.get('Nome do dispositivo', '')), 'left'),
-            (modelo,  'left'),
+            (marca,  'left'),
             (serial,  'left'),
             (apelido,                                'left'),
             (usuario,                                'left'),
@@ -468,6 +472,39 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 # RELATÓRIO INTERNO ALTCOM (1 aba, 16 colunas)
 # ==============================================================================
 
+def _parse_ram_pct(row):
+    """Retorna uso de RAM em % (float) ou None."""
+    try:
+        ram_util = float(row.get('Memória RAM utilizada') or 0)  # MB
+        m = re.search(r'([\d,\.]+)', str(row.get('Memória RAM total', '') or ''))
+        if not m:
+            return None
+        ram_total_mb = float(m.group(1).replace(',', '.')) * 1024
+        if ram_total_mb <= 0:
+            return None
+        return (ram_util / ram_total_mb) * 100
+    except Exception:
+        return None
+
+
+def _parse_cpu_pct(row):
+    """Retorna uso de CPU em % (float) ou None."""
+    try:
+        v = row.get('CPU utilizada')
+        if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+            return None
+        return float(v)
+    except Exception:
+        return None
+
+
+def _fmt_pct(val):
+    """Formata percentual para exibição ('XX.0%' ou 'N/D')."""
+    if val is None:
+        return 'N/D'
+    return f"{val:.0f}%"
+
+
 def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None):
     """
     Gera o relatório interno para a equipe Altcom (Excel 1 aba).
@@ -514,7 +551,15 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                 v = str(row.get('Versão do client', '')).strip()
                 if v and v not in ('', 'nan', 'Não possui') and v != str(versao_ref):
                     al_ml = f"Desatualizada ({v}) — atualizar"
-            tem = bool(al_arm or al_win or al_sc or al_ml)
+            al_gargalo = ""
+            ram_pct = _parse_ram_pct(row)
+            cpu_pct = _parse_cpu_pct(row)
+            if ram_pct is not None and ram_pct > 85:
+                al_gargalo = f"RAM em gargalo ({ram_pct:.0f}%)"
+            if cpu_pct is not None and cpu_pct > 80:
+                sep = " | " if al_gargalo else ""
+                al_gargalo += f"{sep}CPU em gargalo ({cpu_pct:.0f}%)"
+            tem = bool(al_arm or al_win or al_sc or al_ml or al_gargalo)
             uso_pct = uso  # raw float
             return pd.Series({
                 '_uso_pct': uso_pct,
@@ -522,6 +567,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                 '_alerta_windows':       al_win,
                 '_alerta_sem_contato':   al_sc,
                 '_alerta_milvus':        al_ml,
+                '_alerta_gargalo':       al_gargalo,
                 '_tem_alerta':           tem,
             })
         inline = df_out.apply(_inline_alerts, axis=1)
@@ -534,11 +580,11 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
 
     # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
-               'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
+               'S.O.', 'Processador', 'RAM', 'Uso RAM %', 'Uso CPU %', 'Armazenamento', 'Uso %',
                'Data Atualização', 'Versão Agente',
                'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
-               'Alerta Sem Contato', 'Alerta Agente Milvus']
+               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta Gargalo']
     NCOLS = len(HEADERS)
 
     wb = Workbook()
@@ -596,6 +642,8 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             (str(row.get('Sistema operacional', '')), 'left'),
             (str(row.get('Processador', '')),          'left'),
             (str(row.get('Memória RAM total', '')),    'center'),
+            (_fmt_pct(_parse_ram_pct(row)), 'center'),
+            (_fmt_pct(_parse_cpu_pct(row)), 'center'),
             (st_s,         'center'),
             (uso_s,        'center'),
             (data_at_val if HAS_DATA_AT else 'N/D', 'center'),
@@ -625,6 +673,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             ("" if _eh_critico else str(row.get('_alerta_windows', '')), 'windows'),
             (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
             (str(row.get('_alerta_milvus', '')),        'milvus'),
+            (str(row.get('_alerta_gargalo', '')),      'gargalo'),
         ]
         for v, color_key in alert_vals:
             bg, fc = ALERT_COLORS[color_key]
