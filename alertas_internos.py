@@ -178,13 +178,13 @@ def calcular_alertas(df, versao_ref=None):
         s = str(v).strip()
         try:
             if '%' in s:
-                return float(s.replace('%', '').replace(',', '.').strip())
+                return min(float(s.replace('%', '').replace(',', '.').strip()), 100.0)
             util_mb = float(s.replace(',', '.'))
             m = _re.search(r'([\d,\.]+)', str(row.get('MEMÓRIA RAM TOTAL', '') or ''))
             if not m:
                 return None
             total_mb = float(m.group(1).replace(',', '.')) * 1024
-            return (util_mb / total_mb * 100) if total_mb > 0 else None
+            return min((util_mb / total_mb * 100), 100.0) if total_mb > 0 else None
         except Exception:
             return None
 
