@@ -152,3 +152,33 @@ class FaixaRollout(db.Model):
     id             = _uuid_pk()
     maquinas_ate   = db.Column(db.Integer)          # 20, 30, NULL (acima)
     rollouts_mes   = db.Column(db.Integer, nullable=False)   # 2, 3, 4
+
+
+class Quarentena(db.Model):
+    """
+    Histórico de dispositivos em quarentena (acompanhamento comercial).
+    Registros nunca são deletados — status muda de 'ativa' -> 'expirada'/'liberada'.
+    Permite ao analista saber se o dispositivo já foi tratado antes.
+
+    status:
+      'ativa'    -> em quarentena, oculto do laudo principal
+      'expirada' -> 30 dias passaram, voltou ao laudo com badge de histórico
+      'liberada' -> analista encerrou antecipadamente (ação concluída)
+    """
+    __tablename__ = 'quarentena'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('ativa', 'expirada', 'liberada')",
+            name='ck_quarentena_status',
+        ),
+    )
+
+    id             = _uuid_pk()
+    dispositivo    = db.Column(db.Text, nullable=False)
+    cliente        = db.Column(db.Text, nullable=False)
+    motivo         = db.Column(db.Text)          # 'SSD' / 'RAM' / 'Win11' / 'Outro'
+    acao_tomada    = db.Column(db.Text)          # descricao tecnica da acao
+    adicionado_por = db.Column(db.Text)          # email do analista
+    adicionado_em  = db.Column(db.Date, nullable=False, server_default=text('CURRENT_DATE'))
+    expira_em      = db.Column(db.Date, nullable=False)
+    status         = db.Column(db.Text, nullable=False, server_default='ativa')
