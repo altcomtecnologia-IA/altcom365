@@ -121,6 +121,31 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 
 
 /* Modal push */
+.btn-quarentena{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;
+  border-radius:5px;border:none;cursor:pointer;font-size:10px;font-weight:700;
+  background:rgba(180,100,0,.25);color:#FFC000;transition:all .15s;white-space:nowrap}
+.btn-quarentena:hover{background:rgba(180,100,0,.45)}
+.qmodal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.qmodal-box{background:var(--navy2);border:1px solid var(--navy3);border-radius:var(--radius);
+  width:100%;max-width:460px;padding:24px;display:flex;flex-direction:column;gap:16px}
+.qmodal-title{font-size:15px;font-weight:700;color:var(--cyan)}
+.qmodal-sub{font-size:12px;color:var(--gray4)}
+.qmodal-field{display:flex;flex-direction:column;gap:5px}
+.qmodal-label{font-size:11px;font-weight:600;color:var(--gray3);text-transform:uppercase;letter-spacing:.4px}
+.qmodal-input,.qmodal-textarea{background:var(--navy3);border:1px solid var(--navy4);
+  color:var(--white);border-radius:7px;padding:9px 12px;font-family:'Inter',sans-serif;
+  font-size:13px;outline:none;resize:vertical;width:100%}
+.qmodal-input:focus,.qmodal-textarea:focus{border-color:var(--cyan)}
+.qmodal-textarea{min-height:72px}
+.qmodal-footer{display:flex;gap:10px;justify-content:flex-end}
+.qmodal-cancel{padding:8px 18px;border-radius:7px;border:1px solid var(--navy4);
+  background:transparent;color:var(--gray3);cursor:pointer;font-size:13px}
+.qmodal-cancel:hover{background:var(--navy3)}
+.qmodal-ok{padding:8px 18px;border-radius:7px;border:none;
+  background:var(--cyan);color:var(--navy);cursor:pointer;font-size:13px;font-weight:700}
+.qmodal-ok:hover{background:var(--cyan2)}
+.qmodal-ok:disabled{opacity:.5;cursor:not-allowed}
 
 
 /* ── Vista Detalhe ── */
@@ -443,6 +468,7 @@ function renderTab(cli, idx){
       <td>${escHtml(d.so)}</td>
       <td style="white-space:nowrap">${escHtml(d.ultimo_contato)}</td>
       <td>${alertBadges(d.alertas)}</td>
+      <td style="white-space:nowrap"><button class="btn-quarentena" data-host="${escHtml(d.hostname)}" data-cliente="${escHtml(nome)}" onclick="abrirModalQ(this)" title="Quarentena">🔒 Quarentena</button></td>
     </tr>`).join('');
 
   // Full tab HTML
@@ -503,6 +529,7 @@ function renderTab(cli, idx){
               <th>Sistema Operacional</th>
               <th>Último Contato</th>
               <th>Alertas</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tbody-${safeId}">${rowsHtml}</tbody>
@@ -927,8 +954,63 @@ function fecharFiltroPainel(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
+function abrirModalQ(btn){
+  const host=btn.dataset.host, cli=btn.dataset.cliente;
+  document.getElementById('qm-host').textContent=host;
+  document.getElementById('qm-hostname-hidden').value=host;
+  document.getElementById('qm-cliente-hidden').value=cli;
+  document.getElementById('qm-motivo').value='';
+  document.getElementById('qm-acao').value='';
+  document.getElementById('qmodal').style.display='flex';
+}
+function fecharModalQ(){
+  document.getElementById('qmodal').style.display='none';
+}
+async function confirmarQuarentena(){
+  const btn=document.getElementById('qm-ok');
+  const host=document.getElementById('qm-hostname-hidden').value;
+  const cli=document.getElementById('qm-cliente-hidden').value;
+  const mot=document.getElementById('qm-motivo').value.trim();
+  const acao=document.getElementById('qm-acao').value.trim();
+  if(!mot){document.getElementById('qm-motivo').focus();return;}
+  btn.disabled=true; btn.textContent='Enviando…';
+  try{
+    const payload={dispositivo:host,cliente:cli,motivo:mot,acao_tomada:acao};
+    const r=await fetch('/quarentenar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!r.ok)throw new Error(await r.text());
+    fecharModalQ();
+    alert('Dispositivo colocado em quarentena por 30 dias.');
+  }catch(e){
+    alert('Erro: '+e.message);
+    btn.disabled=false; btn.textContent='Confirmar';
+  }
+}
 </script>
 
+<div id="qmodal" class="qmodal-overlay" style="display:none" onclick="if(event.target===this)fecharModalQ()">
+  <div class="qmodal-box">
+    <div class="qmodal-title">🔒 Quarentena — 30 dias</div>
+    <div class="qmodal-sub">Dispositivo: <strong id="qm-host" style="color:var(--white)"></strong></div>
+    <input type="hidden" id="qm-hostname-hidden">
+    <input type="hidden" id="qm-cliente-hidden">
+    <div class="qmodal-field">
+      <label class="qmodal-label">Motivo da quarentena *</label>
+      <input id="qm-motivo" class="qmodal-input" type="text" placeholder="Ex: Aguardando aprovação de SSD…">
+    </div>
+    <div class="qmodal-field">
+      <label class="qmodal-label">Ação técnica tomada</label>
+      <textarea id="qm-acao" class="qmodal-textarea" placeholder="Descreva o que foi feito ou combinado…"></textarea>
+    </div>
+    <div class="qmodal-footer">
+      <button class="qmodal-cancel" onclick="fecharModalQ()">Cancelar</button>
+      <button id="qm-ok" class="qmodal-ok" onclick="confirmarQuarentena()">Confirmar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 
