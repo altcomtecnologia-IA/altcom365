@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
 from engine_servidores import classify_servidor, BADGE_COLORS as BADGE_COLORS_SRV
 from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
+                                build_relatorio_desempenho,
                                 normalize_df, normalize_df_servidores, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
@@ -444,6 +445,8 @@ def api_dados_visualizacao():
                 ('_alerta_windows',       'windows'),
                 ('_alerta_sem_contato',   'sem_contato'),
                 ('_alerta_milvus',        'milvus'),
+                ('_alerta_ram',           'ram'),
+                ('_alerta_cpu',           'cpu'),
             ]:
                 val = row.get(col, '')
                 if val:
@@ -573,6 +576,54 @@ def baixar_relatorio_unico():
                          download_name=f'Relatorio_Interno_{safe}.xlsx')
     except Exception as e:
         return jsonify({'erro': f'Erro ao gerar relatório: {str(e)}'}), 500
+
+
+@app.route('/baixar-relatorio-desempenho', methods=['POST'])
+@requer("laudo:ler")
+def baixar_relatorio_desempenho():
+    """
+    Gera relatório consolidado de desempenho: todos os dispositivos
+    de todos os clientes com RAM > 90% ou CPU > 90%.
+    """
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+
+    try:
+        # Processa todos os clientes e concatena
+        frames = []
+        for cliente in df['NOME FANTASIA DO CLIENTE'].dropna().unique():
+            df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+            from alertas_internos import calcular_alertas
+            df_alertas = calcular_alertas(df_cli, versao_ref)
+            df_norm    = normalize_df(df_alertas)
+            frames.append(df_norm)
+
+        if not frames:
+            return jsonify({'erro': 'Nenhum dado encontrado.'}), 400
+
+        df_all = pd.concat(frames, ignore_index=True)
+
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            build_relatorio_desempenho(df_all, out_path)
+            xlsx_data = open(out_path, 'rb').read()
+        finally:
+            try: os.unlink(out_path)
+            except: pass
+
+        return send_file(
+            io.BytesIO(xlsx_data),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='Relatorio_Desempenho_Altcom365.xlsx',
+        )
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao gerar relatório de desempenho: {str(e)}'}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
