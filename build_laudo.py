@@ -152,6 +152,7 @@ COL_MAP_SERVIDORES = {
     'NÚMERO DO SERIAL':                 'Número do serial',
     'EXCLUÍDO':                         'Excluído',
     'DATA DE ATUALIZAÇÃO':              'Data de atualização',
+    'VERSÃO DO CLIENT':                  'Versão do client',
 }
 
 COLUNAS_OBRIGATORIAS_SERVIDORES = [
