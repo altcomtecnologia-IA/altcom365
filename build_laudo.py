@@ -473,27 +473,39 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 # ==============================================================================
 
 def _parse_ram_pct(row):
-    """Retorna uso de RAM em % (float) ou None."""
+    """Retorna uso de RAM em % (float) ou None.
+    Suporta dois formatos do Milvus:
+      - MB bruto (ex: 8331)          → calcula % sobre RAM total
+      - Percentual string (ex: '86,39%') → usa direto
+    """
+    v = row.get('Memória RAM utilizada')
+    if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+        return None
+    s = str(v).strip()
     try:
-        ram_util = float(row.get('Memória RAM utilizada') or 0)  # MB
+        if '%' in s:
+            return float(s.replace('%', '').replace(',', '.').strip())
+        ram_util_mb = float(s.replace(',', '.'))
         m = re.search(r'([\d,\.]+)', str(row.get('Memória RAM total', '') or ''))
         if not m:
             return None
         ram_total_mb = float(m.group(1).replace(',', '.')) * 1024
         if ram_total_mb <= 0:
             return None
-        return (ram_util / ram_total_mb) * 100
+        return (ram_util_mb / ram_total_mb) * 100
     except Exception:
         return None
 
 
 def _parse_cpu_pct(row):
-    """Retorna uso de CPU em % (float) ou None."""
+    """Retorna uso de CPU em % (float) ou None.
+    Suporta '80' (int) e '80%' (string com percentual).
+    """
+    v = row.get('CPU utilizada')
+    if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+        return None
     try:
-        v = row.get('CPU utilizada')
-        if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
-            return None
-        return float(v)
+        return float(str(v).replace('%', '').replace(',', '.').strip())
     except Exception:
         return None
 
