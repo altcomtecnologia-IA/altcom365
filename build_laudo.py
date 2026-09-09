@@ -518,7 +518,7 @@ def _fmt_pct(val):
     return f"{val:.0f}%"
 
 
-def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None):
+def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None, historico_set=None, em_acompanhamento=None):
     """
     Gera o relatório interno para a equipe Altcom (Excel 1 aba).
 
@@ -594,7 +594,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                'Data Atualização', 'Versão Agente',
                'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
-               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU']
+               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Já tratado']
     NCOLS = len(HEADERS)
 
     wb = Workbook()
@@ -699,8 +699,19 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             c.border    = brd()
             ci += 1
 
+        # -- 'Já tratado'
+        if historico_set is not None:
+            _chave = (str(row.get('NOME DO DISPOSITIVO', '')), cliente_nome or '')
+            _ja_tratado = 'Sim' if _chave in historico_set else ''
+            c = ws.cell(row=r, column=ci, value=_ja_tratado)
+            c.font      = Font(name='Arial', size=8, bold=bool(_ja_tratado))
+            c.fill      = PatternFill('solid', fgColor='FFF2CC') if _ja_tratado else PatternFill('solid', fgColor=ZEBRA if z else WHITE)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border    = brd()
+            ci += 1
+
     # -- Larguras --------------------------------------------------------------
-    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26]
+    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26, 14]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
@@ -708,11 +719,34 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
     # -- Rodape -----------------------------------------------------------------
     last_r = (len(alert_df) + 5) if not alert_df.empty else 6
     ws.merge_cells(f'A{last_r}:{get_column_letter(NCOLS)}{last_r}')
+    # -- Aba 'Em acompanhamento' ------------------------------------------
+    if em_acompanhamento:
+        ws_q = wb.create_sheet('Em acompanhamento')
+        _q_cols = ['Dispositivo', 'Cliente', 'Motivo', 'Ação tomada', 'Adicionado por', 'Adicionado em', 'Expira em']
+        for _ci_h, _h in enumerate(_q_cols, 1):
+            _c = ws_q.cell(row=1, column=_ci_h, value=_h)
+            _c.font = Font(name='Arial', size=9, bold=True, color='FFFFFF')
+            _c.fill = PatternFill('solid', fgColor='2E4057')
+            _c.alignment = Alignment(horizontal='center', vertical='center')
+        for _ri, _entry in enumerate(em_acompanhamento, 2):
+            for _ci_v, _val in enumerate([
+                _entry.get('dispositivo', ''), _entry.get('cliente', ''),
+                _entry.get('motivo', ''), _entry.get('acao_tomada', ''),
+                _entry.get('adicionado_por', ''), str(_entry.get('adicionado_em', '')),
+                str(_entry.get('expira_em', '')),
+            ], 1):
+                _c = ws_q.cell(row=_ri, column=_ci_v, value=_val)
+                _c.font = Font(name='Arial', size=9)
+                _c.alignment = Alignment(horizontal='left', vertical='center')
+        for _i, _w in enumerate([30, 25, 40, 40, 25, 15, 15], 1):
+            ws_q.column_dimensions[get_column_letter(_i)].width = _w
+
     wb.save(output_path)
 
 
 # ==============================================================================
 # RELATÓRIO DE DESEMPENHO (cross-client — RAM/CPU em alerta)
+# ==================== (cross-client — RAM/CPU em alerta)
 # ==============================================================================
 
 def build_relatorio_desempenho(df_all, output_path):
