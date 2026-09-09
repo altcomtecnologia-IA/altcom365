@@ -71,9 +71,34 @@ def _parse_uso(val):
     if pd.isna(val) or s.lower() in ('nan%', 'nan', ''):
         return None
     try:
-        return float(s.replace('%', '').strip())
+        return float(s.replace('%', '').replace(',', '.').strip())
     except ValueError:
         return None
+
+
+def _parse_ram_uso_pct(ram_util_val, ram_total_val) -> float:
+    """
+    Retorna uso de RAM em % (0-100).
+    Suporta dois formatos do Milvus:
+      - Percentual string (ex: '20,04%' ou '84.87%') → usa direto
+      - MB bruto (ex: 3849)                           → calcula sobre RAM total em GB→MB
+    """
+    s = str(ram_util_val).strip()
+    if not s or s.lower() in ('nan', 'não possui', ''):
+        return 0.0
+    try:
+        if '%' in s:
+            return float(s.replace('%', '').replace(',', '.').strip())
+        ram_util_mb = float(s.replace(',', '.'))
+        m = re.search(r'([\d,\.]+)', str(ram_total_val or ''))
+        if not m:
+            return 0.0
+        ram_total_gb = float(m.group(1).replace(',', '.'))
+        if ram_total_gb <= 0:
+            return 0.0
+        return (ram_util_mb / (ram_total_gb * 1024)) * 100
+    except Exception:
+        return 0.0
 
 
 def _is_vm(row) -> bool:
@@ -185,8 +210,6 @@ def classify_servidor(row) -> pd.Series:
       Núcleos do processador, Localização, Data de compra, Data de garantia.
     """
     proc      = str(row.get('Processador', ''))
-    ram_total = _parse_ram(row.get('Memória RAM total', 0))
-    ram_usada = _parse_ram(row.get('Memória RAM utilizada', 0))
     cpu_uso   = _parse_uso(row.get('CPU utilizada', None))
     st_total  = _parse_storage(row.get('Armazenamento interno total', 0))
     st_usado  = _parse_storage(row.get('Armazenamento interno utilizado', 0))
@@ -196,7 +219,10 @@ def classify_servidor(row) -> pd.Series:
     familia, tier = parse_cpu_servidor(proc)
 
     # Percentuais de utilização
-    ram_pct = (ram_usada / ram_total * 100) if ram_total > 0 else 0
+    ram_pct = _parse_ram_uso_pct(
+        row.get('Memória RAM utilizada', 0),
+        row.get('Memória RAM total', 0)
+    )
     st_pct  = (st_usado  / st_total  * 100) if st_total  > 0 else 0
 
     # Flags de SO
