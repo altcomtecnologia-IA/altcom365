@@ -24,6 +24,7 @@ from flask_migrate import Migrate
 
 from extensoes import db, normalizar_database_url
 from clientes import clientes_bp
+import quarentena_ops
 
 logger = logging.getLogger(__name__)
 
@@ -361,20 +362,38 @@ def baixar_relatorios_internos():
     df         = sess_data['df']
     versao_ref = sess_data['versao_ref']
 
+    # Quarentena: carrega dados com fallback gracioso se banco indisponivel
+    try:
+        _q_ativas = quarentena_ops.get_ativas_set()
+        _q_hist   = quarentena_ops.tem_historico_set()
+        _q_lista  = quarentena_ops.get_ativas_lista()
+    except Exception:
+        _q_ativas = set()
+        _q_hist   = set()
+        _q_lista  = []
+
     try:
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
             for cliente in clientes_sel:
                 df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+                # Remove dispositivos em quarentena ativa do relatorio principal
+                df_cli = df_cli[~df_cli['NOME DO DISPOSITIVO'].astype(str).apply(
+                    lambda d, _c=cliente: (d, _c) in _q_ativas
+                )]
                 if df_cli.empty:
                     continue
                 df_alertas = calcular_alertas(df_cli, versao_ref)
                 df_norm    = normalize_df(df_alertas)
 
+                em_acomp_cli = [r for r in _q_lista if r['cliente'] == cliente]
+
                 with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
                     out_path = tmp.name
                 try:
-                    build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
+                    build_relatorio_interno(df_norm, out_path, cliente, versao_ref,
+                                            historico_set=_q_hist,
+                                            em_acompanhamento=em_acomp_cli)
                     with open(out_path, 'rb') as fout:
                         xlsx_data = fout.read()
                 finally:
@@ -1298,3 +1317,57 @@ def baixar_laudo_servidores():
     except Exception as e:
         logger.exception('baixar_laudo_servidores: erro')
         return jsonify({'erro': f'Erro ao gerar laudo: {str(e)}'}), 500
+
+
+
+# ── Quarentena ────────────────────────────────────────────────────────────────────────────
+
+@app.route('/quarentenar', methods=['POST'])
+@requer("laudo:ler")
+def quarentenar():
+    """Adiciona dispositivo a quarentena (acompanhamento comercial)."""
+    data        = request.get_json(force=True, silent=True) or {}
+    dispositivo = str(data.get('dispositivo', '')).strip()
+    cliente     = str(data.get('cliente', '')).strip()
+    motivo      = str(data.get('motivo', '')).strip()
+    acao_tomada = str(data.get('acao_tomada', '')).strip()
+    if not dispositivo or not cliente:
+        return jsonify({'erro': 'dispositivo e cliente sao obrigatorios'}), 400
+    try:
+        q = quarentena_ops.quarentenar(dispositivo, cliente, motivo, acao_tomada)
+        return jsonify({'ok': True, 'id': str(q.id),
+                        'expira_em': q.expira_em.isoformat()})
+    except Exception as e:
+        logger.exception('quarentenar: erro')
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentenar/<qid>/liberar', methods=['POST'])
+@requer("laudo:ler")
+def quarentenar_liberar(qid):
+    """Libera antecipadamente uma quarentena."""
+    try:
+        ok = quarentena_ops.liberar(qid)
+        return jsonify({'ok': ok})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentena/ativas', methods=['GET'])
+@requer("laudo:ler")
+def quarentena_ativas():
+    """Lista todas as quarentenas ativas com dias restantes."""
+    try:
+        return jsonify({'ativas': quarentena_ops.get_ativas_lista()})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentena/historico/<dispositivo>/<cliente>', methods=['GET'])
+@requer("laudo:ler")
+def quarentena_historico(dispositivo, cliente):
+    """Retorna historico completo de quarentenas de um dispositivo."""
+    try:
+        return jsonify({'historico': quarentena_ops.get_historico(dispositivo, cliente)})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
