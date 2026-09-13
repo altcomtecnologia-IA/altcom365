@@ -299,6 +299,21 @@ class Quarentena(db.Model):
       'ativa'    -> em quarentena, oculto do laudo principal
       'expirada' -> 30 dias passaram, voltou ao laudo com badge de histórico
       'liberada' -> analista encerrou antecipadamente (ação concluída)
+
+    Os dois Index abaixo (achado no merge da Fase 2, 13/09/2026): os
+    índices já existem no banco, criados via op.create_index() na
+    migration f3a8b9c21d54 — não declará-los aqui fazia
+    `alembic revision --autogenerate` propor DROP INDEX para os dois,
+    achando que sumiram do código (mesma classe de falso positivo já
+    documentada na migration da Fase 2 para ix_audit_log_usuario_em,
+    ux_faixa_rollout_maquinas_ate e ux_plano_vigente_por_cliente — mas
+    aqueles três não têm forma declarativa nesta versão do SQLAlchemy
+    (DESC, NULLS NOT DISTINCT, índice parcial); estes dois são btree
+    simples, então dá pra declarar e eliminar o falso positivo de vez,
+    em vez de só documentar que ele vai continuar aparecendo. Os nomes
+    batem exatamente com os da migration — declarar de novo não gera
+    diff nem tenta recriar nada, só faz o autogenerate parar de achar
+    que os índices deveriam ser apagados.
     """
     __tablename__ = 'quarentena'
     __table_args__ = (
@@ -306,6 +321,8 @@ class Quarentena(db.Model):
             "status IN ('ativa', 'expirada', 'liberada')",
             name='ck_quarentena_status',
         ),
+        db.Index('ix_quarentena_disp_cli', 'dispositivo', 'cliente'),
+        db.Index('ix_quarentena_status', 'status'),
     )
 
     id             = _uuid_pk()
