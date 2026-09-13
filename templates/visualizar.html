@@ -86,6 +86,8 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 .btn-dl-laudo:hover{background:#154360}
 .btn-dl-interno{background:#1A4A2E;color:#A9DFBF}
 .btn-dl-interno:hover{background:#145A32}
+.btn-dl-desempenho{background:#6E2F8A;color:#E8DAEF}
+.btn-dl-desempenho:hover{background:#5B2576}
 .btn-dl:disabled{opacity:.4;cursor:not-allowed}
 
 /* ── Vista Resumo ── */
@@ -119,6 +121,31 @@ html,body{min-height:100vh;background:var(--navy);color:var(--white);font-family
 
 
 /* Modal push */
+.btn-quarentena{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;
+  border-radius:5px;border:none;cursor:pointer;font-size:10px;font-weight:700;
+  background:rgba(180,100,0,.25);color:#FFC000;transition:all .15s;white-space:nowrap}
+.btn-quarentena:hover{background:rgba(180,100,0,.45)}
+.qmodal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.qmodal-box{background:var(--navy2);border:1px solid var(--navy3);border-radius:var(--radius);
+  width:100%;max-width:460px;padding:24px;display:flex;flex-direction:column;gap:16px}
+.qmodal-title{font-size:15px;font-weight:700;color:var(--cyan)}
+.qmodal-sub{font-size:12px;color:var(--gray4)}
+.qmodal-field{display:flex;flex-direction:column;gap:5px}
+.qmodal-label{font-size:11px;font-weight:600;color:var(--gray3);text-transform:uppercase;letter-spacing:.4px}
+.qmodal-input,.qmodal-textarea{background:var(--navy3);border:1px solid var(--navy4);
+  color:var(--white);border-radius:7px;padding:9px 12px;font-family:'Inter',sans-serif;
+  font-size:13px;outline:none;resize:vertical;width:100%}
+.qmodal-input:focus,.qmodal-textarea:focus{border-color:var(--cyan)}
+.qmodal-textarea{min-height:72px}
+.qmodal-footer{display:flex;gap:10px;justify-content:flex-end}
+.qmodal-cancel{padding:8px 18px;border-radius:7px;border:1px solid var(--navy4);
+  background:transparent;color:var(--gray3);cursor:pointer;font-size:13px}
+.qmodal-cancel:hover{background:var(--navy3)}
+.qmodal-ok{padding:8px 18px;border-radius:7px;border:none;
+  background:var(--cyan);color:var(--navy);cursor:pointer;font-size:13px;font-weight:700}
+.qmodal-ok:hover{background:var(--cyan2)}
+.qmodal-ok:disabled{opacity:.5;cursor:not-allowed}
 
 
 /* ── Vista Detalhe ── */
@@ -259,6 +286,11 @@ td.hostname{font-family:monospace;font-size:12px;color:var(--white);font-weight:
         <span id="total-geral-label"></span>
         <span class="versao-ref" id="versao-ref-label" style="display:none"></span>
       </div>
+      <button class="btn-dl btn-dl-desempenho" id="btn-desempenho"
+              onclick="baixarDesempenho()" style="display:none;padding:8px 14px;font-size:12px"
+              title="Todos os clientes — dispositivos com RAM ou CPU > 90%">
+        📊 Relatório de Desempenho
+      </button>
       <button class="btn-dl btn-dl-interno" id="btn-consolidado"
               onclick="baixarConsolidado()" style="display:none;padding:8px 14px;font-size:12px">
         ⬇ Todos Rel. Internos
@@ -436,6 +468,7 @@ function renderTab(cli, idx){
       <td>${escHtml(d.so)}</td>
       <td style="white-space:nowrap">${escHtml(d.ultimo_contato)}</td>
       <td>${alertBadges(d.alertas)}</td>
+      <td style="white-space:nowrap"><button class="btn-quarentena" data-host="${escHtml(d.hostname)}" data-cliente="${escHtml(nome)}" onclick="abrirModalQ(this)" title="Quarentena">🔒 Quarentena</button></td>
     </tr>`).join('');
 
   // Full tab HTML
@@ -496,6 +529,7 @@ function renderTab(cli, idx){
               <th>Sistema Operacional</th>
               <th>Último Contato</th>
               <th>Alertas</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tbody-${safeId}">${rowsHtml}</tbody>
@@ -506,7 +540,16 @@ function renderTab(cli, idx){
       </div>
     </div>
 
-    <!-- History -->
+    
+<!-- Em acompanhamento -->
+<div class="history-section" id="qlist-${safeId}">
+<div class="history-title">🔒 Em acompanhamento</div>
+<div id="qlist-body-${idx}" class="history-list">
+<p class="history-empty">Carregando…</p>
+</div>
+</div>
+
+<!-- History -->
     <div class="history-section" id="history-${safeId}">
       <div class="history-title">Histórico de processamentos</div>
       <div class="history-list" id="history-list-${safeId}">
@@ -639,6 +682,26 @@ function downloadDoc(tipo, nome){
   .catch(e=>alert('Erro no download: '+e.message));
 }
 
+// ── Relatório de Desempenho ───────────────────────────────────────────────────
+async function baixarDesempenho() {
+  const btn = document.getElementById('btn-desempenho');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando…';
+  try {
+    const resp = await fetch('/baixar-relatorio-desempenho', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}',
+    });
+    if (!resp.ok) { const e = await resp.json(); alert(e.erro || 'Erro'); return; }
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Relatorio_Desempenho_Altcom365.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { alert('Erro ao baixar: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = orig; }
+}
+
 // ── Initial load ──────────────────────────────────────────────────────────────
 async function init(){
   try {
@@ -671,6 +734,8 @@ async function init(){
       vEl.style.display='';
     }
     document.getElementById('header-meta').style.display='';
+    const btnDesemp = document.getElementById('btn-desempenho');
+    if (btnDesemp) btnDesemp.style.display = '';
     const btnCons = document.getElementById('btn-consolidado');
     if (btnCons) btnCons.style.display = '';
 
@@ -709,6 +774,7 @@ async function init(){
     // Load first tab's history
     _historyLoaded[0] = true;
     loadHistory(0);
+loadQuarentenas();
 
     // Show main content
     document.getElementById('loading-screen').style.display='none';
@@ -897,9 +963,101 @@ function fecharFiltroPainel(){
   document.getElementById('painel-filtrado').classList.remove('aberto');
 }
 
+async function loadQuarentenas(){
+try{
+const r=await fetch('/quarentena/ativas');
+const data=await r.json();
+const ativas=data.ativas||[];
+const byCliente={};
+ativas.forEach(q=>{if(!byCliente[q.cliente])byCliente[q.cliente]=[];byCliente[q.cliente].push(q);});
+_clientNames.forEach((nome,idx)=>{
+const el=document.getElementById('qlist-body-'+idx);
+if(!el)return;
+const items=byCliente[nome]||[];
+if(!items.length){el.innerHTML='<p class="history-empty">Nenhum dispositivo em acompanhamento.</p>';return;}
+el.innerHTML=items.map(q=>`
+<div class="history-item">
+<span class="history-date">🔒 ${escHtml(q.dispositivo)}</span>
+<div class="history-stats">
+<span class="hstat hstat-total">Motivo: ${escHtml(q.motivo)}</span>
+${q.acao_tomada?'<span class="hstat hstat-total">A\u00e7\u00e3o: '+escHtml(q.acao_tomada)+'</span>':''}
+<span class="hstat hstat-critico">Expira: ${escHtml(q.expira_em)}</span>
+${q.adicionado_por?'<span class="hstat hstat-total">Por: '+escHtml(q.adicionado_por)+'</span>':''}
+</div>
+<button onclick="liberarQuarentena('${escHtml(q.id)}')"
+style="padding:4px 10px;border-radius:5px;border:1px solid #5a3a3a;background:rgba(180,0,0,.2);color:#ff9999;font-size:11px;cursor:pointer">
+🔓 Liberar
+</button>
+</div>`).join('');
+});
+}catch(e){console.error('loadQuarentenas:',e);}
+}
+async function liberarQuarentena(qid){
+if(!confirm('Liberar este dispositivo da quarentena?'))return;
+try{
+const r=await fetch('/quarentenar/'+qid+'/liberar',{method:'POST'});
+if(!r.ok)throw new Error(await r.text());
+location.reload();
+}catch(e){alert('Erro: '+e.message);}
+}
 document.addEventListener('DOMContentLoaded', init);
+function abrirModalQ(btn){
+  const host=btn.dataset.host, cli=btn.dataset.cliente;
+  document.getElementById('qm-host').textContent=host;
+  document.getElementById('qm-hostname-hidden').value=host;
+  document.getElementById('qm-cliente-hidden').value=cli;
+  document.getElementById('qm-motivo').value='';
+  document.getElementById('qm-acao').value='';
+  document.getElementById('qmodal').style.display='flex';
+}
+function fecharModalQ(){
+  document.getElementById('qmodal').style.display='none';
+}
+async function confirmarQuarentena(){
+  const btn=document.getElementById('qm-ok');
+  const host=document.getElementById('qm-hostname-hidden').value;
+  const cli=document.getElementById('qm-cliente-hidden').value;
+  const mot=document.getElementById('qm-motivo').value.trim();
+  const acao=document.getElementById('qm-acao').value.trim();
+  if(!mot){document.getElementById('qm-motivo').focus();return;}
+  btn.disabled=true; btn.textContent='Enviando…';
+  try{
+    const payload={dispositivo:host,cliente:cli,motivo:mot,acao_tomada:acao};
+    const r=await fetch('/quarentenar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!r.ok)throw new Error(await r.text());
+    fecharModalQ();
+    location.reload();
+  }catch(e){
+    alert('Erro: '+e.message);
+    btn.disabled=false; btn.textContent='Confirmar';
+  }
+}
 </script>
 
+<div id="qmodal" class="qmodal-overlay" style="display:none" onclick="if(event.target===this)fecharModalQ()">
+  <div class="qmodal-box">
+    <div class="qmodal-title">🔒 Quarentena — 30 dias</div>
+    <div class="qmodal-sub">Dispositivo: <strong id="qm-host" style="color:var(--white)"></strong></div>
+    <input type="hidden" id="qm-hostname-hidden">
+    <input type="hidden" id="qm-cliente-hidden">
+    <div class="qmodal-field">
+      <label class="qmodal-label">Motivo da quarentena *</label>
+      <input id="qm-motivo" class="qmodal-input" type="text" placeholder="Ex: Aguardando aprovação de SSD…">
+    </div>
+    <div class="qmodal-field">
+      <label class="qmodal-label">Ação técnica tomada</label>
+      <textarea id="qm-acao" class="qmodal-textarea" placeholder="Descreva o que foi feito ou combinado…"></textarea>
+    </div>
+    <div class="qmodal-footer">
+      <button class="qmodal-cancel" onclick="fecharModalQ()">Cancelar</button>
+      <button id="qm-ok" class="qmodal-ok" onclick="confirmarQuarentena()">Confirmar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 

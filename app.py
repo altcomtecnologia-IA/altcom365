@@ -1,6 +1,6 @@
 """
 Altcom 365 v2 — Backend Flask
-Suporta upload do Relatório Milvus Completo (todos os clientes)
+Suporta upload do Relatório Milvus Completo (todos os clientes)h
 e geração de laudos em ZIP.
 
 V11: PostgreSQL + SQLAlchemy + Flask-Migrate + APScheduler
@@ -11,8 +11,10 @@ from flask import Flask, request, send_file, jsonify, render_template, session
 
 sys.path.insert(0, os.path.dirname(__file__))
 from engine_altcom365  import classify, BADGE_COLORS
+from engine_servidores import classify_servidor, BADGE_COLORS as BADGE_COLORS_SRV
 from build_laudo       import (build_laudo_cliente, build_relatorio_interno,
-                                normalize_df, is_new_format)
+                                build_relatorio_desempenho,
+                                normalize_df, normalize_df_servidores, is_new_format)
 from alertas_internos  import (calcular_versao_referencia, calcular_alertas,
                                 resumo_alertas)
 import pandas as pd
@@ -22,6 +24,7 @@ from flask_migrate import Migrate
 
 from extensoes import db, normalizar_database_url
 from clientes import clientes_bp
+import quarentena_ops
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,13 @@ COLUNAS_OBRIGATORIAS = [
     'ARMAZENAMENTO INTERNO TOTAL', 'ARMAZENAMENTO INTERNO UTILIZADO',
     'ARMAZENAMENTO INTERNO DISPONÍVEL', 'VERSÃO DO CLIENT',
     'APELIDO', 'USUÁRIO LOGADO', 'EXCLUÍDO', 'NOME FANTASIA DO CLIENTE',
+]
+
+# Colunas obrigatórias para o relatório de servidores (Milvus — Tabela de Dispositivos)
+COLUNAS_OBRIGATORIAS_SRV = [
+    'Nome do dispositivo', 'Processador', 'Sistema operacional',
+    'Memória RAM total', 'Armazenamento interno total',
+    'Nome fantasia do cliente',
 ]
 
 # ── Helpers de sessão ─────────────────────────────────────────────────────────
@@ -352,20 +362,38 @@ def baixar_relatorios_internos():
     df         = sess_data['df']
     versao_ref = sess_data['versao_ref']
 
+    # Quarentena: carrega dados com fallback gracioso se banco indisponivel
+    try:
+        _q_ativas = quarentena_ops.get_ativas_set()
+        _q_hist   = quarentena_ops.tem_historico_set()
+        _q_lista  = quarentena_ops.get_ativas_lista()
+    except Exception:
+        _q_ativas = set()
+        _q_hist   = set()
+        _q_lista  = []
+
     try:
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
             for cliente in clientes_sel:
                 df_cli = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+                # Remove dispositivos em quarentena ativa do relatorio principal
+                df_cli = df_cli[~df_cli['NOME DO DISPOSITIVO'].astype(str).apply(
+                    lambda d, _c=cliente: (d, _c) in _q_ativas
+                )]
                 if df_cli.empty:
                     continue
                 df_alertas = calcular_alertas(df_cli, versao_ref)
                 df_norm    = normalize_df(df_alertas)
 
+                em_acomp_cli = [r for r in _q_lista if r['cliente'] == cliente]
+
                 with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
                     out_path = tmp.name
                 try:
-                    build_relatorio_interno(df_norm, out_path, cliente, versao_ref)
+                    build_relatorio_interno(df_norm, out_path, cliente, versao_ref,
+                                            historico_set=_q_hist,
+                                            em_acompanhamento=em_acomp_cli)
                     with open(out_path, 'rb') as fout:
                         xlsx_data = fout.read()
                 finally:
@@ -436,6 +464,8 @@ def api_dados_visualizacao():
                 ('_alerta_windows',       'windows'),
                 ('_alerta_sem_contato',   'sem_contato'),
                 ('_alerta_milvus',        'milvus'),
+                ('_alerta_ram',           'ram'),
+                ('_alerta_cpu',           'cpu'),
             ]:
                 val = row.get(col, '')
                 if val:
@@ -565,6 +595,54 @@ def baixar_relatorio_unico():
                          download_name=f'Relatorio_Interno_{safe}.xlsx')
     except Exception as e:
         return jsonify({'erro': f'Erro ao gerar relatório: {str(e)}'}), 500
+
+
+@app.route('/baixar-relatorio-desempenho', methods=['POST'])
+@requer("laudo:ler")
+def baixar_relatorio_desempenho():
+    """
+    Gera relatório consolidado de desempenho: todos os dispositivos
+    de todos os clientes com RAM > 90% ou CPU > 90%.
+    """
+    sess_data = _get_current_session()
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df         = sess_data['df']
+    versao_ref = sess_data['versao_ref']
+
+    try:
+        # Processa todos os clientes e concatena
+        frames = []
+        for cliente in df['NOME FANTASIA DO CLIENTE'].dropna().unique():
+            df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+            from alertas_internos import calcular_alertas
+            df_alertas = calcular_alertas(df_cli, versao_ref)
+            df_norm    = normalize_df(df_alertas)
+            frames.append(df_norm)
+
+        if not frames:
+            return jsonify({'erro': 'Nenhum dado encontrado.'}), 400
+
+        df_all = pd.concat(frames, ignore_index=True)
+
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            build_relatorio_desempenho(df_all, out_path)
+            xlsx_data = open(out_path, 'rb').read()
+        finally:
+            try: os.unlink(out_path)
+            except: pass
+
+        return send_file(
+            io.BytesIO(xlsx_data),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='Relatorio_Desempenho_Altcom365.xlsx',
+        )
+    except Exception as e:
+        return jsonify({'erro': f'Erro ao gerar relatório de desempenho: {str(e)}'}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1027,3 +1105,284 @@ def download_relatorio_consolidado():
         logger.exception('download_relatorio_consolidado: erro inesperado')
         return jsonify({'erro': f'Erro inesperado: {str(e)}'}), 500
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LAUDO DE SERVIDORES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/servidores')
+@requer("laudo:ler")
+def servidores_home():
+    """Página do Laudo de Eficiência de Servidores."""
+    return render_template('servidores.html')
+
+
+@app.route('/upload-servidores', methods=['POST'])
+@requer("laudo:ler")
+def upload_servidores():
+    """
+    Recebe o relatório Milvus de servidores (Tabela de Dispositivos filtrada
+    para SERVIDOR = Sim no Milvus).
+    Aplica classify_servidor e salva os resultados em sessão.
+    Retorna resumo de classificações e lista de clientes.
+    """
+    _clear_old_sessions()
+
+    if 'arquivo' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
+    f = request.files['arquivo']
+    if not f.filename or not allowed_file(f.filename):
+        return jsonify({'erro': 'Formato inválido. Envie um arquivo .xlsx'}), 400
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            f.save(tmp.name)
+            tmp_path = tmp.name
+
+        df = pd.read_excel(tmp_path)
+
+        # Normaliza nomes de coluna (remove espaços extras)
+        df.columns = [c.strip() for c in df.columns]
+        df = normalize_df_servidores(df)
+
+        # Coluna 'Sem contato' — sem resposta há mais de 2 dias
+        if 'Data de atualização' in df.columns:
+            _hoje = pd.Timestamp.now().normalize()
+            df['Sem contato'] = pd.to_datetime(
+                df['Data de atualização'], dayfirst=True, errors='coerce'
+            ).apply(lambda d: 'Alerta 2 dias sem contato' if (pd.isna(d) or (_hoje - d).days > 2) else '')
+        else:
+            df['Sem contato'] = False
+
+        # Valida colunas mínimas
+        faltando = [c for c in COLUNAS_OBRIGATORIAS_SRV if c not in df.columns]
+        if faltando:
+            return jsonify({'erro': f'Colunas ausentes: {", ".join(faltando)}'}), 400
+
+        # Filtra excluídos
+        if 'Excluído' in df.columns:
+            df = df[df['Excluído'].astype(str).str.upper() != 'SIM']
+        df = df.reset_index(drop=True)
+
+        total = len(df)
+        if total == 0:
+            return jsonify({'erro': 'Nenhum servidor encontrado após filtros.'}), 400
+
+        # Aplica engine de servidores
+        results = df.apply(classify_servidor, axis=1)
+        df_out  = pd.concat([df.reset_index(drop=True),
+                             results.reset_index(drop=True)], axis=1)
+
+        # Resumo de classificações
+        order  = ['EXCELENTE', 'ÓTIMO', 'BOM', 'SATISFATÓRIO', 'CRÍTICO']
+        resumo = []
+        for cat in order:
+            qtd = int((df_out['Classificação'] == cat).sum())
+            if qtd == 0:
+                continue
+            mask     = df_out['Classificação'] == cat
+            eol_n    = int(df_out.loc[mask, 'Badge'].str.contains('EOL').sum())
+            sob_n    = int(df_out.loc[mask, 'Badge'].str.contains('Sobrecarga').sum())
+            bg, fg   = BADGE_COLORS_SRV[cat]
+            resumo.append({
+                'label': cat, 'qtd': qtd,
+                'pct': round(qtd / total * 100),
+                'eol': eol_n, 'sobrecarga': sob_n,
+                'bg': bg, 'fg': fg,
+            })
+
+        clientes = sorted(df_out['Nome fantasia do cliente'].dropna().unique().tolist())
+
+        # Salva sessão
+        sess_data = {
+            'df_srv':    df_out,
+            'timestamp': datetime.now(),
+        }
+        sid = _save_session(sess_data)
+        session['sess_id_srv'] = sid
+
+        return jsonify({
+            'total':    total,
+            'clientes': clientes,
+            'resumo':   resumo,
+        })
+
+    except Exception as e:
+        logger.exception('upload_servidores: erro')
+        return jsonify({'erro': f'Erro ao processar arquivo: {str(e)}'}), 500
+    finally:
+        if tmp_path:
+            try: os.unlink(tmp_path)
+            except: pass
+
+
+@app.route('/baixar-laudo-servidores', methods=['POST'])
+@requer("laudo:ler")
+def baixar_laudo_servidores():
+    """
+    Gera e baixa o Excel do Laudo de Eficiência de Servidores.
+    Filtra por clientes selecionados (opcional — sem filtro = todos).
+    """
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    data         = request.get_json(force=True, silent=True) or {}
+    clientes_sel = data.get('clientes', [])
+
+    sid = session.get('sess_id_srv')
+    if not sid:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+    sess_data = _load_session(sid)
+    if sess_data is None:
+        return jsonify({'erro': 'Sessão expirada. Faça o upload novamente.'}), 400
+
+    df_out = sess_data['df_srv']
+    if clientes_sel:
+        df_out = df_out[df_out['Nome fantasia do cliente'].isin(clientes_sel)]
+
+    if df_out.empty:
+        return jsonify({'erro': 'Nenhum servidor encontrado para os clientes selecionados.'}), 400
+
+    try:
+        # Badge → Classificação (cabeçalho Excel)
+        df_out = df_out.copy()
+        if 'Badge' in df_out.columns:
+            df_out.rename(columns={'Badge': 'Classificação', 'Classificação': '_cl_base'}, inplace=True)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Laudo de Servidores'
+
+        # ── Cabeçalho ────────────────────────────────────────────
+        COLUNAS_SAIDA = [
+            'Nome do dispositivo', 'Nome fantasia do cliente',
+            'Máquina virtual', 'É VM',
+            'Processador', 'Núcleos do processador',
+            'Memória RAM total', 'Memória RAM utilizada',
+            'CPU utilizada',
+            'Armazenamento interno total', 'Armazenamento interno utilizado',
+            'Sistema operacional',
+            'Antivírus',
+            'Número do serial', 'Modelo',
+            'Localização',
+            'Classificação', 'Descritivo',
+            'Durabilidade estimada', 'Sugestão',
+            'Versão do client', 'Sem contato',
+        ]
+        # Filtra colunas que realmente existem no df
+        colunas_presentes = [c for c in COLUNAS_SAIDA if c in df_out.columns]
+
+        header_fill = PatternFill('solid', fgColor='1F3864')
+        header_font = Font(bold=True, color='FFFFFF', size=10)
+        center      = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin        = Side(style='thin', color='CCCCCC')
+        border      = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        for ci, col in enumerate(colunas_presentes, 1):
+            cell            = ws.cell(row=1, column=ci, value=col)
+            cell.fill       = header_fill
+            cell.font       = header_font
+            cell.alignment  = center
+            cell.border     = border
+
+        ws.row_dimensions[1].height = 30
+
+        # ── Linhas de dados ───────────────────────────────────────
+        for ri, (_, row) in enumerate(df_out[colunas_presentes].iterrows(), 2):
+            classif = str(row.get('Classificação', ''))
+            bg, fg  = BADGE_COLORS_SRV.get(classif, ('FFFFFF', '000000'))
+
+            for ci, col in enumerate(colunas_presentes, 1):
+                val  = row.get(col, '')
+                cell = ws.cell(row=ri, column=ci, value=str(val) if pd.notna(val) else '')
+                cell.border    = border
+                cell.alignment = Alignment(vertical='center', wrap_text=True)
+
+                # Colorir coluna Badge
+                if col == 'Badge':
+                    cell.fill = PatternFill('solid', fgColor=bg)
+                    cell.font = Font(bold=True, color=fg, size=10)
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        # ── Larguras de coluna ────────────────────────────────────
+        LARGURAS = {
+            'Nome do dispositivo': 22, 'Nome fantasia do cliente': 22,
+            'Processador': 35, 'Sistema operacional': 28,
+            'Badge': 20, 'Descritivo': 45, 'Sugestão': 35,
+            'Durabilidade estimada': 22,
+        }
+        for ci, col in enumerate(colunas_presentes, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = LARGURAS.get(col, 16)
+
+        ws.freeze_panes = 'A2'
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='Laudo_Eficiencia_Servidores_Altcom365.xlsx',
+        )
+
+    except Exception as e:
+        logger.exception('baixar_laudo_servidores: erro')
+        return jsonify({'erro': f'Erro ao gerar laudo: {str(e)}'}), 500
+
+
+
+# ── Quarentena ────────────────────────────────────────────────────────────────────────────
+
+@app.route('/quarentenar', methods=['POST'])
+@requer("laudo:ler")
+def quarentenar():
+    """Adiciona dispositivo a quarentena (acompanhamento comercial)."""
+    data        = request.get_json(force=True, silent=True) or {}
+    dispositivo = str(data.get('dispositivo', '')).strip()
+    cliente     = str(data.get('cliente', '')).strip()
+    motivo      = str(data.get('motivo', '')).strip()
+    acao_tomada = str(data.get('acao_tomada', '')).strip()
+    if not dispositivo or not cliente:
+        return jsonify({'erro': 'dispositivo e cliente sao obrigatorios'}), 400
+    try:
+        q = quarentena_ops.quarentenar(dispositivo, cliente, motivo, acao_tomada)
+        return jsonify({'ok': True, 'id': str(q.id),
+                        'expira_em': q.expira_em.isoformat()})
+    except Exception as e:
+        logger.exception('quarentenar: erro')
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentenar/<qid>/liberar', methods=['POST'])
+@requer("laudo:ler")
+def quarentenar_liberar(qid):
+    """Libera antecipadamente uma quarentena."""
+    try:
+        ok = quarentena_ops.liberar(qid)
+        return jsonify({'ok': ok})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentena/ativas', methods=['GET'])
+@requer("laudo:ler")
+def quarentena_ativas():
+    """Lista todas as quarentenas ativas com dias restantes."""
+    try:
+        return jsonify({'ativas': quarentena_ops.get_ativas_lista()})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/quarentena/historico/<dispositivo>/<cliente>', methods=['GET'])
+@requer("laudo:ler")
+def quarentena_historico(dispositivo, cliente):
+    """Retorna historico completo de quarentenas de um dispositivo."""
+    try:
+        return jsonify({'historico': quarentena_ops.get_historico(dispositivo, cliente)})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500

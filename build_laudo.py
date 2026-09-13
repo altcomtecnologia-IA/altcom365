@@ -40,6 +40,11 @@ COL_MAP_NOVO = {
     'USUÁRIO LOGADO':              'Usuário logado',
     'DATA DE ATUALIZAÇÃO':         'Data de atualização',
     'VERSÃO DO CLIENT':            'Versão do client',
+    'MODELO':                      'Modelo',
+    'NÚMERO DO SERIAL':             'Número do serial',
+    'PLACA MÃE':                   'Placa mãe',
+    'CPU UTILIZADA':               'CPU utilizada',
+    'MEMÓRIA RAM UTILIZADA':       'Memória RAM utilizada',
 }
 
 # -- Frases que NÃO aparecem no laudo do cliente -------------------------------
@@ -58,6 +63,8 @@ ALERT_COLORS = {
     'sem_contato':   ("D4E8F8", "2874A6"),
     'milvus':        ("ECEFF1", "5D6D7E"),
     'troca':         ("F9E6E6", "922B21"),
+    'ram':           ("FFE5CC", "B7500A"),
+    'cpu':           ("FDEBD0", "784212"),
 }
 
 
@@ -116,6 +123,54 @@ def normalize_df(df):
             df[col] = (df[col].astype(str)
                        .replace({'nan': '', 'None': '', 'Não possui': '', 'NaN': ''}))
 
+    return df
+
+COL_MAP_SERVIDORES = {
+    'NOME DO DISPOSITIVO':              'Nome do dispositivo',
+    'TIPO DO DISPOSITIVO':              'Tipo de dispositivo',
+    'SISTEMA OPERACIONAL':              'Sistema operacional',
+    'VERSÃO DA BUILD DO SISTEMA OPERACIONAL': 'Versão da Build do Sistema Operacional',
+    'SISTEMA OPERACIONAL DESATUALIZADO':'Sistema operacional desatualizado',
+    'PROCESSADOR':                      'Processador',
+    'NÚCLEOS DO PROCESSADOR':           'Núcleos do processador',
+    'CPU UTILIZADA':                    'CPU utilizada',
+    'TEMPERATURA DA CPU':               'Temperatura da CPU',
+    'MEMÓRIA RAM TOTAL':                'Memória RAM total',
+    'MEMÓRIA RAM UTILIZADA':            'Memória RAM utilizada',
+    'ARMAZENAMENTO INTERNO TOTAL':      'Armazenamento interno total',
+    'ARMAZENAMENTO INTERNO UTILIZADO':  'Armazenamento interno utilizado',
+    'ARMAZENAMENTO INTERNO DISPONÍVEL': 'Armazenamento interno disponível',
+    'ANTIVÍRUS':                        'Antivírus',
+    'LOCALIZAÇÃO':                      'Localização',
+    'DATA DE COMPRA':                   'Data de compra',
+    'DATA DE GARANTIA':                 'Data de garantia',
+    'UPTIME (TEMPO DE ATIVIDADE)':      'Uptime (tempo de atividade)',
+    'NOME FANTASIA DO CLIENTE':         'Nome fantasia do cliente',
+    'MÁQUINA VIRTUAL':                  'Máquina virtual',
+    'SERVIDOR':                         'Servidor',
+    'MODELO':                           'Modelo',
+    'NÚMERO DO SERIAL':                 'Número do serial',
+    'EXCLUÍDO':                         'Excluído',
+    'DATA DE ATUALIZAÇÃO':              'Data de atualização',
+    'VERSÃO DO CLIENT':                  'Versão do client',
+}
+
+COLUNAS_OBRIGATORIAS_SERVIDORES = [
+    'Nome do dispositivo', 'Processador', 'Sistema operacional',
+    'Memória RAM total', 'Armazenamento interno total', 'Nome fantasia do cliente',
+]
+
+
+def normalize_df_servidores(df):
+    """
+    Converte export UPPERCASE do Laudo Servidores (Milvus) para as colunas
+    que o engine_servidores.classify_servidor espera.
+    Preserva "interno" nos nomes de armazenamento (diferença chave vs normalize_df).
+    """
+    if not is_new_format(df):
+        return df
+    df = df.copy()
+    df = df.rename(columns=COL_MAP_SERVIDORES)
     return df
 
 
@@ -268,7 +323,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 
     # -- ABA 1: LAUDO ---------------------------------------------------------
     ws = wb.active; ws.title = "Laudo"
-    NCOLS = 14
+    NCOLS = 15
 
     title_strip(ws, 1, f"LAUDO DE EFICIÊNCIA TÉCNICA  |  {cliente_nome.upper()}", NCOLS)
     ws.row_dimensions[2].height = 18
@@ -278,8 +333,8 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
-    HEADERS = ['Tipo', 'Dispositivo', 'Apelido', 'Usuário Logado', 'S.O.',
-               'Processador', 'Núcleos', 'RAM', 'Armazenamento', 'Uso %',
+    HEADERS = ['Tipo', 'Dispositivo', 'Marca', 'Nº Serial', 'Apelido', 'Usuário Logado',
+               'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Classificação', 'Descritivo', 'Durabilidade', 'Sugestão']
     ws.row_dimensions[4].height = 22
     for ci, h in enumerate(HEADERS, 1):
@@ -303,15 +358,18 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         dur_raw      = str(row.get('Durabilidade estimada', ''))
         apelido      = str(row.get('Apelido', '')) or '—'
         usuario      = str(row.get('Usuário logado', '')) or '—'
+        marca        = str(row.get('Placa mãe', '')) or '—'
+        serial       = str(row.get('Número do serial', '')) or '—'
 
         vals = [
             (tipo_label,                            'center'),
             (str(row.get('Nome do dispositivo', '')), 'left'),
+            (marca,  'left'),
+            (serial,  'left'),
             (apelido,                                'left'),
             (usuario,                                'left'),
             (str(row.get('Sistema operacional', '')), 'left'),
             (str(row.get('Processador', '')),          'left'),
-            (str(row.get('Núcleos do processador', '')), 'center'),
             (str(row.get('Memória RAM total', '')),    'center'),
             (st_s,    'center'),
             (uso_s,   'center'),
@@ -322,7 +380,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         ]
 
         for ci, (v, ha) in enumerate(vals, 1):
-            if ci == 11:  # Classificação — badge colorido
+            if ci == 12:  # Classificação — badge colorido
                 c = ws.cell(row=r, column=ci, value=v)
                 fill, font = badge_style(classif_base)
                 c.fill = fill; c.font = font
@@ -331,7 +389,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
             else:
                 dat(ws, r, ci, v, z=z, ha=ha)
 
-    for i, w in enumerate([10, 20, 16, 16, 26, 36, 8, 8, 14, 7, 20, 50, 12, 30], 1):
+    for i, w in enumerate([10, 20, 18, 16, 14, 16, 26, 36, 8, 14, 7, 20, 50, 12, 30], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
 
@@ -416,7 +474,52 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 # RELATÓRIO INTERNO ALTCOM (1 aba, 16 colunas)
 # ==============================================================================
 
-def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None):
+def _parse_ram_pct(row):
+    """Retorna uso de RAM em % (float) ou None.
+    Suporta dois formatos do Milvus:
+      - MB bruto (ex: 8331)          → calcula % sobre RAM total
+      - Percentual string (ex: '86,39%') → usa direto
+    """
+    v = row.get('Memória RAM utilizada')
+    if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+        return None
+    s = str(v).strip()
+    try:
+        if '%' in s:
+            return float(s.replace('%', '').replace(',', '.').strip())
+        ram_util_mb = float(s.replace(',', '.'))
+        m = re.search(r'([\d,\.]+)', str(row.get('Memória RAM total', '') or ''))
+        if not m:
+            return None
+        ram_total_mb = float(m.group(1).replace(',', '.')) * 1024
+        if ram_total_mb <= 0:
+            return None
+        return min((ram_util_mb / ram_total_mb) * 100, 100.0)
+    except Exception:
+        return None
+
+
+def _parse_cpu_pct(row):
+    """Retorna uso de CPU em % (float) ou None.
+    Suporta '80' (int) e '80%' (string com percentual).
+    """
+    v = row.get('CPU utilizada')
+    if v is None or str(v).strip() in ('', 'nan', 'Não possui'):
+        return None
+    try:
+        return float(str(v).replace('%', '').replace(',', '.').strip())
+    except Exception:
+        return None
+
+
+def _fmt_pct(val):
+    """Formata percentual para exibição ('XX.0%' ou 'N/D')."""
+    if val is None:
+        return 'N/D'
+    return f"{val:.0f}%"
+
+
+def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None, historico_set=None, em_acompanhamento=None):
     """
     Gera o relatório interno para a equipe Altcom (Excel 1 aba).
 
@@ -449,7 +552,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
         hoje_ts = hoje
         def _inline_alerts(row):
             uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
-            al_arm = f"Preventiva — uso {uso:.1f}%" if (uso and uso > 70) else ""
+            al_arm = f"Preventiva — uso {uso:.1f}%" if (uso and uso > 90) else ""
             so = str(row.get('Sistema operacional', '')).lower()
             al_win = "Upgrade para Win 11" if 'windows 10' in so else ""
             al_sc = ""
@@ -462,7 +565,11 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                 v = str(row.get('Versão do client', '')).strip()
                 if v and v not in ('', 'nan', 'Não possui') and v != str(versao_ref):
                     al_ml = f"Desatualizada ({v}) — atualizar"
-            tem = bool(al_arm or al_win or al_sc or al_ml)
+            ram_pct = _parse_ram_pct(row)
+            cpu_pct = _parse_cpu_pct(row)
+            al_ram = f"RAM em alerta ({ram_pct:.0f}%)" if (ram_pct is not None and ram_pct > 90) else ""
+            al_cpu = f"CPU em alerta ({cpu_pct:.0f}%)" if (cpu_pct is not None and cpu_pct > 90) else ""
+            tem = bool(al_arm or al_win or al_sc or al_ml or al_ram or al_cpu)
             uso_pct = uso  # raw float
             return pd.Series({
                 '_uso_pct': uso_pct,
@@ -470,6 +577,8 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
                 '_alerta_windows':       al_win,
                 '_alerta_sem_contato':   al_sc,
                 '_alerta_milvus':        al_ml,
+                '_alerta_ram':           al_ram,
+                '_alerta_cpu':           al_cpu,
                 '_tem_alerta':           tem,
             })
         inline = df_out.apply(_inline_alerts, axis=1)
@@ -482,11 +591,11 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
 
     # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
-               'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
+               'S.O.', 'Processador', 'RAM', 'Uso RAM %', 'Uso CPU %', 'Armazenamento', 'Uso %',
                'Data Atualização', 'Versão Agente',
                'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
-               'Alerta Sem Contato', 'Alerta Agente Milvus']
+               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Já tratado']
     NCOLS = len(HEADERS)
 
     wb = Workbook()
@@ -544,6 +653,8 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             (str(row.get('Sistema operacional', '')), 'left'),
             (str(row.get('Processador', '')),          'left'),
             (str(row.get('Memória RAM total', '')),    'center'),
+            (_fmt_pct(_parse_ram_pct(row)), 'center'),
+            (_fmt_pct(_parse_cpu_pct(row)), 'center'),
             (st_s,         'center'),
             (uso_s,        'center'),
             (data_at_val if HAS_DATA_AT else 'N/D', 'center'),
@@ -573,6 +684,8 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             ("" if _eh_critico else str(row.get('_alerta_windows', '')), 'windows'),
             (str(row.get('_alerta_sem_contato', '')),   'sem_contato'),
             (str(row.get('_alerta_milvus', '')),        'milvus'),
+            (str(row.get('_alerta_ram',  '')),          'ram'),
+            (str(row.get('_alerta_cpu',  '')),          'cpu'),
         ]
         for v, color_key in alert_vals:
             bg, fc = ALERT_COLORS[color_key]
@@ -587,8 +700,19 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
             c.border    = brd()
             ci += 1
 
+        # -- 'Já tratado'
+        if historico_set is not None:
+            _chave = (str(row.get('NOME DO DISPOSITIVO', '')), cliente_nome or '')
+            _ja_tratado = 'Sim' if _chave in historico_set else ''
+            c = ws.cell(row=r, column=ci, value=_ja_tratado)
+            c.font      = Font(name='Arial', size=8, bold=bool(_ja_tratado))
+            c.fill      = PatternFill('solid', fgColor='FFF2CC') if _ja_tratado else PatternFill('solid', fgColor=ZEBRA if z else WHITE)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border    = brd()
+            ci += 1
+
     # -- Larguras --------------------------------------------------------------
-    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26]
+    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26, 14]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
@@ -596,4 +720,125 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None)
     # -- Rodape -----------------------------------------------------------------
     last_r = (len(alert_df) + 5) if not alert_df.empty else 6
     ws.merge_cells(f'A{last_r}:{get_column_letter(NCOLS)}{last_r}')
+    # -- Aba 'Em acompanhamento' ------------------------------------------
+    if em_acompanhamento:
+        ws_q = wb.create_sheet('Em acompanhamento')
+        _q_cols = ['Dispositivo', 'Cliente', 'Motivo', 'Ação tomada', 'Adicionado por', 'Adicionado em', 'Expira em']
+        for _ci_h, _h in enumerate(_q_cols, 1):
+            _c = ws_q.cell(row=1, column=_ci_h, value=_h)
+            _c.font = Font(name='Arial', size=9, bold=True, color='FFFFFF')
+            _c.fill = PatternFill('solid', fgColor='2E4057')
+            _c.alignment = Alignment(horizontal='center', vertical='center')
+        for _ri, _entry in enumerate(em_acompanhamento, 2):
+            for _ci_v, _val in enumerate([
+                _entry.get('dispositivo', ''), _entry.get('cliente', ''),
+                _entry.get('motivo', ''), _entry.get('acao_tomada', ''),
+                _entry.get('adicionado_por', ''), str(_entry.get('adicionado_em', '')),
+                str(_entry.get('expira_em', '')),
+            ], 1):
+                _c = ws_q.cell(row=_ri, column=_ci_v, value=_val)
+                _c.font = Font(name='Arial', size=9)
+                _c.alignment = Alignment(horizontal='left', vertical='center')
+        for _i, _w in enumerate([30, 25, 40, 40, 25, 15, 15], 1):
+            ws_q.column_dimensions[get_column_letter(_i)].width = _w
+
     wb.save(output_path)
+
+
+# ==============================================================================
+# RELATÓRIO DE DESEMPENHO (cross-client — RAM/CPU em alerta)
+# ==================== (cross-client — RAM/CPU em alerta)
+# ==============================================================================
+
+def build_relatorio_desempenho(df_all, output_path):
+    """
+    Gera relatório consolidado de desempenho com TODOS os dispositivos
+    de TODOS os clientes onde RAM > 90% ou CPU > 90%.
+
+    df_all : DataFrame já normalizado (após normalize_df) com _alerta_ram/_alerta_cpu.
+    """
+    hoje_str = pd.Timestamp.today().strftime('%d/%m/%y %H:%M')
+
+    # Filtra apenas dispositivos em alerta de desempenho
+    has_ram = df_all.get('_alerta_ram', pd.Series([''] * len(df_all))).str.len() > 0
+    has_cpu = df_all.get('_alerta_cpu', pd.Series([''] * len(df_all))).str.len() > 0
+    df_perf = df_all[has_ram | has_cpu].copy()
+
+    HEADERS = ['Cliente', 'Dispositivo', 'Apelido', 'Tipo', 'Processador',
+               'RAM', 'Uso RAM %', 'Uso CPU %', 'S.O.', 'Data Atualização',
+               'Alerta RAM', 'Alerta CPU']
+    NCOLS = len(HEADERS)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Desempenho"
+
+    title_strip(ws, 1, "RELATÓRIO DE DESEMPENHO — RAM/CPU EM ALERTA (>90%)", NCOLS)
+    ws.row_dimensions[2].height = 18
+    ws.merge_cells(f'A2:{get_column_letter(NCOLS)}2')
+    ws['A2'] = f"Dispositivos com RAM ou CPU acima de 90% — gerado em {hoje_str}"
+    ws['A2'].font      = Font(name='Arial', size=9, color="888888")
+    ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
+    ws.row_dimensions[3].height = 5
+
+    ws.row_dimensions[4].height = 22
+    for ci, h in enumerate(HEADERS, 1):
+        hdr(ws, 4, ci, h)
+
+    if df_perf.empty:
+        ws.merge_cells(f'A5:{get_column_letter(NCOLS)}5')
+        c = ws.cell(row=5, column=1, value="Nenhum dispositivo com RAM ou CPU acima de 90%.")
+        c.font      = Font(name='Arial', size=10, italic=True, color="888888")
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[5].height = 28
+        wb.save(output_path)
+        return
+
+    for i, (_, row) in enumerate(df_perf.iterrows()):
+        r = i + 5
+        ws.row_dimensions[r].height = 36
+        z = i % 2 == 0
+
+        tipo_label = ("Desktop"
+                      if device_type(str(row.get('Tipo de dispositivo', ''))) == 'desktop'
+                      else "Notebook")
+        data_at = str(row.get('Data de atualização', 'N/D'))
+        al_ram  = str(row.get('_alerta_ram', ''))
+        al_cpu  = str(row.get('_alerta_cpu', ''))
+
+        base_vals = [
+            (str(row.get('Cliente', '')),                   'left'),
+            (str(row.get('Nome do dispositivo', '')),        'left'),
+            (str(row.get('Apelido', '')) or '—',            'left'),
+            (tipo_label,                                     'center'),
+            (str(row.get('Processador', '')),                'left'),
+            (str(row.get('Memória RAM total', '')),          'center'),
+            (_fmt_pct(_parse_ram_pct(row)),                  'center'),
+            (_fmt_pct(_parse_cpu_pct(row)),                  'center'),
+            (str(row.get('Sistema operacional', '')),        'left'),
+            (data_at,                                        'center'),
+        ]
+        ci = 1
+        for v, ha in base_vals:
+            dat(ws, r, ci, v, z=z, ha=ha)
+            ci += 1
+
+        # Alerta RAM — laranja
+        for al, color_key in [(al_ram, 'ram'), (al_cpu, 'cpu')]:
+            bg, fc = ALERT_COLORS[color_key]
+            c = ws.cell(row=r, column=ci, value=al if al else "")
+            if al:
+                c.fill = PatternFill("solid", fgColor=bg)
+                c.font = Font(name='Arial', size=8, bold=True, color=fc)
+            else:
+                c.fill = PatternFill("solid", fgColor=ZEBRA if z else WHITE)
+                c.font = Font(name='Arial', size=8, color="CCCCCC")
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border    = brd()
+            ci += 1
+
+    for i, w in enumerate([28, 20, 16, 8, 36, 8, 10, 10, 26, 14, 18, 18], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = 'A5'
+    wb.save(output_path)
+

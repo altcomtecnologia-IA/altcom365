@@ -12,21 +12,25 @@
     li + li { margin-top: .75rem; }
     a { display: block; padding: .9rem 1.1rem; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #1a1a1a; }
     a:hover { border-color: #999; }
+    .desc { font-size: .8rem; color: #888; margin-top: .25rem; }
   </style>
 </head>
 <body>
-  <!--
-    Home mínima de propósito — briefing seção 6.7 só pede que ela exista e
-    pare de ir direto pro Laudos; "respeitar o nível de acesso" é
-    "futuramente" no próprio texto. Sem filtro por capacidade aqui ainda:
-    os dois links aparecem pra qualquer identidade válida (a mesma
-    exigência de sempre, via altcom_auth/middleware.py — nada muda nisso).
-  -->
   <h1>Altcom 365</h1>
   <p class="sub">Escolha um módulo.</p>
   <ul>
-    <li><a href="/laudos">Laudos Técnicos</a></li>
-    <li><a href="/clientes/">Clientes e Processos</a></li>
+    <li>
+      <a href="/laudos">Laudos de Eficiência — Estações de Trabalho</a>
+      <div class="desc">Classificação de notebooks e desktops por processador, RAM e armazenamento.</div>
+    </li>
+    <li>
+      <a href="/servidores">Laudos de Eficiência — Servidores</a>
+      <div class="desc">Classificação de servidores físicos e VMs por geração de CPU e utilização em tempo real.</div>
+    </li>
+    <li>
+      <a href="/clientes/">Clientes e Processos</a>
+      <div class="desc">Gestão de clientes, chamados e processos operacionais.</div>
+    </li>
   </ul>
 </body>
 </html>
