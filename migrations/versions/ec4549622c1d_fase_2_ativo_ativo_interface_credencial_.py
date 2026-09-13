@@ -1,9 +1,31 @@
 """fase 2 - ativo, ativo_interface, credencial, segredo_acesso_log
 
 Revision ID: ec4549622c1d
-Revises: 91b122f37431
+Revises: f3a8b9c21d54
 Create Date: 2026-08-31 00:40:24.035007
 
+Correção de 13/09/2026: down_revision original era 91b122f37431 (o head
+da Fase 1 no momento em que esta migration foi escrita, 31/08/2026). Entre
+então e agora, outra migration (f3a8b9c21d54, "quarentena") foi criada e
+aplicada em produção diretamente em cima de 91b122f37431, sem passar por
+esta branch — confirmado via `psql` em produção por Altair, 13/09/2026:
+alembic_version = f3a8b9c21d54, e nenhuma tabela da Fase 2 existe lá. Esta
+migration nunca chegou a ser aplicada em lugar nenhum (nem em produção,
+nem mergeada em v2-api), então reescrever down_revision aqui é seguro — a
+regra de "não editar migration já aplicada" não vale para uma migration
+que nunca rodou fora de bancos de teste descartáveis. Sem esta correção,
+`alembic upgrade head` bifurcaria em dois heads (91b122f37431 →
+ec4549622c1d e 91b122f37431 → f3a8b9c21d54) no momento em que esta branch
+fosse mergeada em v2-api, e o Pre-Deploy Command do Render falharia com
+"Multiple head revisions are present" — derrubando o deploy do Laudos
+junto, não só do módulo Clientes.
+
+ATENÇÃO para quem for mergear esta branch: esta correção só é válida
+enquanto f3a8b9c21d54 continuar sendo o head de v2-api. Repita `alembic
+heads` contra o estado real de v2-api imediatamente antes do merge — se
+outra migration tiver sido criada diretamente na branch nesse meio tempo
+(como aconteceu entre 31/08 e 09/09 com a quarentena), down_revision
+precisa apontar para ela, não para f3a8b9c21d54.
 """
 from typing import Sequence, Union
 
@@ -13,7 +35,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'ec4549622c1d'
-down_revision: Union[str, Sequence[str], None] = '91b122f37431'
+down_revision: Union[str, Sequence[str], None] = 'f3a8b9c21d54'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
