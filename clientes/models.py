@@ -3,6 +3,11 @@ clientes/models.py
 Núcleo de dados do módulo Clientes e Processos.
 Fase 1 (briefing 4.1): Cliente, ClienteContato, Plano, FaixaRollout.
 Fase 2 (briefing 4.2): Ativo, AtivoInterface, Credencial.
+Fase 2.1 (PEDIDO_FASE_2_1.md): Grupo, cliente.grupo_id,
+credencial.observacao/atributos, ck_ativo_tipo estendido, índices que
+faltavam nas tabelas da Fase 2. Puramente aditivo — nenhuma linha
+existente foi migrada (ativo/ativo_interface/credencial ainda vazias na
+data desta mudança).
 Sistemas, perfis e checklist (4.3, 4.4) ainda não entraram.
 
 Usa a instância db de extensoes.py, NÃO a de models.py (que é do Laudos e
@@ -25,6 +30,30 @@ def _uuid_pk():
     )
 
 
+class Grupo(db.Model):
+    """
+    Fase 2.1 (PEDIDO_FASE_2_1.md, item 1). Agrupa clientes que são, na
+    prática, uma infraestrutura só sob CNPJs/contratos diferentes (caso
+    real: eCar, Guia Serviços e Lyon Despachante). `cliente.grupo_id`
+    aponta pra cá; `ativo.cliente_id` e `credencial.cliente_id`
+    continuam NOT NULL e SEM grupo_id próprio — o ativo/credencial
+    compartilhado é registrado sob um dos clientes do grupo, e a regra
+    de leitura ("mostrar também os ativos/credenciais dos outros
+    clientes do mesmo grupo") é consulta, não schema — fica pra Fase 3
+    junto com a tela. Aqui só a estrutura.
+    """
+    __tablename__ = 'grupo'
+
+    id         = _uuid_pk()
+    nome       = db.Column(db.Text, nullable=False, unique=True)
+    observacao = db.Column(db.Text)
+
+    clientes = db.relationship('Cliente', backref='grupo')
+
+    def __repr__(self):
+        return f'<Grupo {self.nome}>'
+
+
 class Cliente(db.Model):
     __tablename__ = 'cliente'
     __table_args__ = (
@@ -38,6 +67,7 @@ class Cliente(db.Model):
         # formato. Cadastro/edição (passo 4) só precisa normalizar para
         # dígitos antes do INSERT/UPDATE; a constraint é a rede de segurança.
         db.CheckConstraint("cnpj ~ '^[0-9]{14}$'", name='ck_cliente_cnpj_normalizado'),
+        db.Index('ix_cliente_grupo', 'grupo_id'),
     )
 
     id              = _uuid_pk()
@@ -48,6 +78,7 @@ class Cliente(db.Model):
     uf              = db.Column(db.CHAR(2))
     status          = db.Column(db.Text, nullable=False, server_default='ativo')
     data_assinatura = db.Column(db.Date)
+    grupo_id        = db.Column(UUID(as_uuid=True), db.ForeignKey('grupo.id'))
     criado_em       = db.Column(db.DateTime(timezone=True), nullable=False,
                                  server_default=text('now()'))
 
@@ -179,13 +210,15 @@ class Ativo(db.Model):
     __table_args__ = (
         db.CheckConstraint(
             "tipo IN ('roteador', 'firewall', 'switch', 'ap', 'link', "
-            "'servidor', 'nvr', 'nobreak')",
+            "'servidor', 'nvr', 'nobreak', 'modem', 'storage', 'camera', "
+            "'impressora')",
             name='ck_ativo_tipo',
         ),
         db.CheckConstraint(
             "status IN ('ativo', 'reserva', 'baixado')",
             name='ck_ativo_status',
         ),
+        db.Index('ix_ativo_cliente', 'cliente_id'),
     )
 
     id            = _uuid_pk()
@@ -218,6 +251,7 @@ class AtivoInterface(db.Model):
             "atribuicao IS NULL OR atribuicao IN ('fixo', 'dhcp', 'pppoe')",
             name='ck_ativo_interface_atribuicao',
         ),
+        db.Index('ix_ativo_interface_ativo', 'ativo_id'),
     )
 
     id          = _uuid_pk()
@@ -267,6 +301,7 @@ class Credencial(db.Model):
             "sensibilidade IN ('operacional', 'administrativa')",
             name='ck_credencial_sensibilidade',
         ),
+        db.Index('ix_credencial_cliente', 'cliente_id'),
     )
 
     id                = _uuid_pk()
@@ -281,6 +316,15 @@ class Credencial(db.Model):
     nonce             = db.Column(db.LargeBinary, nullable=False)
     chave_versao      = db.Column(db.Integer, nullable=False, server_default=text('1'))
     mfa_observacao    = db.Column(db.Text)
+    # Fase 2.1 (item 2): texto de contexto livre — "Gerenciador no pc do
+    # Rodolfo", "com limite de velocidade em 10Mbps". NÃO é segredo: fica
+    # de fora de CAMPOS_REDIGIDOS (clientes/auditoria.py) e de fora do
+    # retorno de revelar_credencial (que devolve só {"segredo": ...}).
+    # Aparece na listagem (GET .../credenciais), junto com atributos.
+    observacao        = db.Column(db.Text)
+    # Cauda longa sem migration por campo — mesmo motivo do atributos de
+    # Ativo. Primeiro uso real: SSID de rede sem fio, {"ssid": "..."}.
+    atributos         = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     rotacionada_em    = db.Column(db.Date)
     criado_em         = db.Column(db.DateTime(timezone=True), nullable=False,
                                    server_default=text('now()'))
