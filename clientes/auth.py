@@ -187,6 +187,18 @@ def requer_clientes(capacidade):
                 return jsonify({"erro": "Acesso não autorizado"}), 403
 
             if not tem_capacidade(identidade["capacidades"], capacidade):
+                # Fase 2.1, item 6: até aqui, negação por capacidade não
+                # deixava rastro nenhum — só o ramo de token inválido acima
+                # loga. Alguém já autenticado sondando, por exemplo,
+                # /credenciais/<id>/revelar sem a capacidade certa não
+                # aparecia em lugar nenhum. Não dá para gravar em
+                # segredo_acesso_log (usuario_id é NOT NULL, e credencial
+                # nem chegou a ser resolvida em rotas que não são a de
+                # revelação) — o lugar certo é o log da aplicação.
+                logger.warning(
+                    "CLIENTES CAPACIDADE NEGADA | rota=%s | método=%s | email=%s | papel=%s | requerida=%s",
+                    request.path, request.method, identidade["email"], identidade["papel"], capacidade,
+                )
                 return jsonify({
                     "erro": "Permissão insuficiente",
                     "capacidade_requerida": capacidade,

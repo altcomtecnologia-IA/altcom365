@@ -122,6 +122,16 @@ def upgrade() -> None:
     # repita este autogenerate vai propor a mesma dupla drop/create de
     # novo, pelo mesmo motivo — o padrão é ignorar essas três linhas
     # sempre, não resolver uma vez.
+    #
+    # Atualização Fase 2.1 (PEDIDO_FASE_2_1.md, item 4): a lista de falsos
+    # positivos cresceu para QUATRO. ix_segredo_acesso_log_usuario_em
+    # (usuario_id, em DESC — ver migration Fase 2.1) tem o mesmo problema
+    # do DESC sem forma declarativa portável nesta versão, e passa a
+    # aparecer em todo autogenerate daqui pra frente, junto com os três
+    # de cima. Os outros cinco índices novos da Fase 2.1 (ix_cliente_
+    # grupo, ix_ativo_cliente, ix_ativo_interface_ativo,
+    # ix_credencial_cliente, ix_segredo_acesso_log_credencial) TÊM forma
+    # declarativa e foram declarados nos models — não entram nesta lista.
 
     # ── Ativo, credencial: novas tabelas, mesmo padrão append-only? NÃO ────
     # ativo e credencial são dado vivo (status muda, senha rotaciona) —

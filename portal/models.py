@@ -128,6 +128,13 @@ class SegredoAcessoLog(db.Model):
             "resultado IN ('concedido', 'negado')",
             name='ck_segredo_acesso_log_resultado',
         ),
+        # Fase 2.1, item 4: btree simples em credencial_id, forma
+        # declarativa direta — declarada para o autogenerate não propor
+        # DROP INDEX (mesmo padrão de Quarentena). O índice composto
+        # (usuario_id, em DESC) não tem forma portável nesta versão por
+        # causa do DESC — fica só na migration (ver comentário de falsos
+        # positivos em ec4549622c1d).
+        db.Index('ix_segredo_acesso_log_credencial', 'credencial_id'),
     )
 
     id            = db.Column(db.BigInteger, primary_key=True)

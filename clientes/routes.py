@@ -14,6 +14,7 @@ aplicação; credencial não tem equivalente ainda porque rotação (Fase 2)
 é UPDATE, e desativar uma credencial fica para quando essa necessidade
 aparecer de verdade — não inventada agora.
 """
+import datetime
 import logging
 import uuid as uuid_lib
 
@@ -32,6 +33,7 @@ clientes_bp = Blueprint('clientes', __name__, url_prefix='/clientes')
 
 _TIPOS_ATIVO_VALIDOS = {
     'roteador', 'firewall', 'switch', 'ap', 'link', 'servidor', 'nvr', 'nobreak',
+    'modem', 'storage', 'camera', 'impressora',
 }
 _ESCOPO_TIPOS_VALIDOS = {'ativo', 'sistema', 'cliente'}
 _SENSIBILIDADES_VALIDAS = {'operacional', 'administrativa'}
@@ -49,6 +51,28 @@ def _erro(mensagem, codigo, **extra):
     corpo = {"erro": mensagem}
     corpo.update(extra)
     return jsonify(corpo), codigo
+
+
+def _data_ou_erro(dados, campo):
+    """Converte dados.get(campo) (string 'AAAA-MM-DD') em datetime.date.
+
+    Fase 2.1, item 5: instalado_em/garantia_ate/rotacionada_em iam direto
+    de dados.get(...) para colunas Date — uma data malformada estourava
+    erro de banco (500 com traceback) em vez de 400. O script de
+    importação vai empurrar datas escritas à mão em formatos variados,
+    então isto passa a ser validado na borda da API.
+
+    Campo ausente/vazio é válido (os três campos são opcionais): devolve
+    (None, None). Em caso de formato inválido devolve (None, <response>)
+    já pronta para a rota dar `return` direto.
+    """
+    bruto = dados.get(campo)
+    if not bruto:
+        return None, None
+    try:
+        return datetime.date.fromisoformat(str(bruto)), None
+    except ValueError:
+        return None, _erro(f"{campo} não é uma data válida (use AAAA-MM-DD)", 400)
 
 
 @clientes_bp.route('/')
@@ -90,12 +114,19 @@ def criar_ativo():
         return _erro("cliente_id não é um UUID válido", 400)
     if tipo not in _TIPOS_ATIVO_VALIDOS:
         return _erro(f"tipo inválido — precisa ser um de {sorted(_TIPOS_ATIVO_VALIDOS)}", 400)
-    if Cliente.query.get(cliente_id) is None:
+    if db.session.get(Cliente, cliente_id) is None:
         return _erro("cliente_id não corresponde a nenhum cliente", 400)
 
     status = dados.get('status', 'ativo')
     if status not in ('ativo', 'reserva', 'baixado'):
         return _erro("status inválido — precisa ser um de ['ativo', 'reserva', 'baixado']", 400)
+
+    instalado_em, erro = _data_ou_erro(dados, 'instalado_em')
+    if erro:
+        return erro
+    garantia_ate, erro = _data_ou_erro(dados, 'garantia_ate')
+    if erro:
+        return erro
 
     ativo = Ativo(
         cliente_id=cliente_id,
@@ -107,8 +138,8 @@ def criar_ativo():
         unidade=dados.get('unidade'),
         localizacao=dados.get('localizacao'),
         status=status,
-        instalado_em=dados.get('instalado_em'),
-        garantia_ate=dados.get('garantia_ate'),
+        instalado_em=instalado_em,
+        garantia_ate=garantia_ate,
         atributos=dados.get('atributos') or {},
     )
     db.session.add(ativo)
@@ -130,7 +161,7 @@ def criar_ativo():
 @clientes_bp.route('/ativos/<uuid:ativo_id>/interfaces', methods=['POST'])
 @requer_clientes('clientes.editar')
 def criar_ativo_interface(ativo_id):
-    ativo = Ativo.query.get(ativo_id)
+    ativo = db.session.get(Ativo, ativo_id)
     if ativo is None:
         return _erro("ativo_id não corresponde a nenhum ativo", 404)
 
@@ -197,8 +228,12 @@ def criar_credencial():
         cliente_id = uuid_lib.UUID(str(cliente_id_bruto))
     except ValueError:
         return _erro("cliente_id não é um UUID válido", 400)
-    if Cliente.query.get(cliente_id) is None:
+    if db.session.get(Cliente, cliente_id) is None:
         return _erro("cliente_id não corresponde a nenhum cliente", 400)
+
+    rotacionada_em, erro = _data_ou_erro(dados, 'rotacionada_em')
+    if erro:
+        return erro
 
     if escopo_tipo not in _ESCOPO_TIPOS_VALIDOS:
         return _erro(f"escopo_tipo inválido — precisa ser um de {sorted(_ESCOPO_TIPOS_VALIDOS)}", 400)
@@ -252,7 +287,9 @@ def criar_credencial():
         nonce=nonce,
         chave_versao=chave_versao,
         mfa_observacao=dados.get('mfa_observacao'),
-        rotacionada_em=dados.get('rotacionada_em'),
+        rotacionada_em=rotacionada_em,
+        observacao=dados.get('observacao'),
+        atributos=dados.get('atributos') or {},
     )
     db.session.add(credencial)
     db.session.flush()
@@ -279,12 +316,16 @@ def criar_credencial():
 def listar_credenciais(cliente_id):
     """
     Metadados só — nunca segredo_cifrado, nunca nonce, nunca chave_versao
-    (briefing 3.2, decisão 9). `bloqueada` é calculada para o papel de
-    quem pediu: True quando a credencial é sensibilidade='administrativa'
-    e a identidade não tem clientes.credencial.admin.revelar — §6.6:
-    aparece como existente e bloqueada, não some. Exige a capacidade
-    "fraca" (operacional) pra sequer listar; quem não tem nem isso não
-    lista nada, nem os rótulos.
+    (briefing 3.2, decisão 9). `observacao` e `atributos` (Fase 2.1, item
+    2) ENTRAM aqui — são metadados de contexto (não segredo), é o que
+    permite o analista entender o acesso sem revelar a senha; `observacao`
+    continua fora de CAMPOS_REDIGIDOS e fora do retorno de
+    revelar_credencial, que devolve só {"segredo": ...}. `bloqueada` é
+    calculada para o papel de quem pediu: True quando a credencial é
+    sensibilidade='administrativa' e a identidade não tem
+    clientes.credencial.admin.revelar — §6.6: aparece como existente e
+    bloqueada, não some. Exige a capacidade "fraca" (operacional) pra
+    sequer listar; quem não tem nem isso não lista nada, nem os rótulos.
     """
     identidade = g.identidade_clientes
     tem_admin = tem_capacidade(identidade['capacidades'], 'clientes.credencial.admin.revelar')
@@ -300,6 +341,8 @@ def listar_credenciais(cliente_id):
             "url": c.url,
             "sensibilidade": c.sensibilidade,
             "rotacionada_em": c.rotacionada_em.isoformat() if c.rotacionada_em else None,
+            "observacao": c.observacao,
+            "atributos": c.atributos,
             "bloqueada": bloqueada,
         })
     return jsonify(resultado)
@@ -344,7 +387,7 @@ def revelar_credencial(credencial_id):
         # um evento de segredo_acesso_log.
         return _erro("motivo é obrigatório", 400)
 
-    credencial = Credencial.query.get(credencial_id)
+    credencial = db.session.get(Credencial, credencial_id)
     if credencial is None:
         registrar_acesso_segredo(identidade, credencial_id, motivo, 'negado')
         db.session.commit()

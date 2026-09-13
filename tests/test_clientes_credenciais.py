@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 
+from extensoes import db
 from tests.conftest import fazer_token, criar_usuario
 
 
@@ -71,13 +72,84 @@ def test_criar_ativo_campo_obrigatorio_faltando(client, db_session, cliente):
 
 
 def test_criar_ativo_tipo_invalido(client, db_session, cliente):
+    """'impressora' era o exemplo de tipo inválido até a Fase 2.1 (item 3)
+    estender ck_ativo_tipo/_TIPOS_ATIVO_VALIDOS — passou a ser aceito (ver
+    test_criar_ativo_tipo_modem_aceito, que cobre exatamente esse tipo
+    novo). 'gerador' continua fora da lista dos dois lados."""
     u = criar_usuario(db_session, 'gestor')
     try:
         token = fazer_token(email=u.email)
         resp = client.post('/clientes/ativos', json={
-            "cliente_id": str(cliente.id), "tipo": "impressora", "apelido": "X",
+            "cliente_id": str(cliente.id), "tipo": "gerador", "apelido": "X",
         }, headers={'Cf-Access-Jwt-Assertion': token})
         assert resp.status_code == 400
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+def test_criar_ativo_tipo_modem_aceito(client, db_session, cliente):
+    """Fase 2.1, item 3: 'modem' entrou em ck_ativo_tipo e em
+    _TIPOS_ATIVO_VALIDOS — é o tipo mais numeroso na planilha real (27
+    modems/ONTs), sem ele boa parte dos ativos não entraria na
+    importação."""
+    from clientes.models import Ativo
+    u = criar_usuario(db_session, 'n3')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post('/clientes/ativos', json={
+            "cliente_id": str(cliente.id), "tipo": "modem", "apelido": "Modem-01",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 201
+        ativo = db.session.get(Ativo, uuid.UUID(resp.get_json()['id']))
+        assert ativo is not None
+        assert ativo.tipo == 'modem'
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Fase 2.1, item 5 — validação de data na borda da API (400, não 500)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_criar_ativo_data_malformada_400_nao_500(client, db_session, cliente):
+    """instalado_em/garantia_ate iam direto pra coluna Date — data
+    malformada virava erro de banco (500) em vez de 400. O script de
+    importação vai empurrar exatamente esse tipo de sujeira (datas
+    escritas à mão em formatos variados)."""
+    u = criar_usuario(db_session, 'gestor')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post('/clientes/ativos', json={
+            "cliente_id": str(cliente.id), "tipo": "roteador", "apelido": "X",
+            "instalado_em": "31/09/2026",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 400
+        assert 'instalado_em' in resp.get_json()['erro']
+
+        resp2 = client.post('/clientes/ativos', json={
+            "cliente_id": str(cliente.id), "tipo": "roteador", "apelido": "Y",
+            "garantia_ate": "não é uma data",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp2.status_code == 400
+        assert 'garantia_ate' in resp2.get_json()['erro']
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+def test_criar_credencial_rotacionada_em_malformada_400_nao_500(client, db_session, cliente):
+    u = criar_usuario(db_session, 'gestor')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post('/clientes/credenciais', json={
+            "cliente_id": str(cliente.id), "escopo_tipo": "cliente",
+            "sensibilidade": "operacional", "rotulo": "x", "segredo": "y",
+            "rotacionada_em": "32/13/2026",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 400
+        assert 'rotacionada_em' in resp.get_json()['erro']
     finally:
         db_session.session.delete(u)
         db_session.session.commit()
@@ -244,14 +316,60 @@ def test_criar_credencial_escopo_ativo_de_outro_cliente_nega(client, db_session,
         db_session.session.commit()
 
 
+def test_criar_credencial_para_cliente_em_grupo(client, db_session, cliente):
+    """
+    Fase 2.1, item 1: cliente pode pertencer a um grupo (caso real: eCar/
+    Guia Serviços/Lyon Despachante, uma infraestrutura só sob três CNPJs).
+    A credencial continua presa a cliente_id normalmente — grupo_id não
+    existe em credencial nem em ativo, de propósito (a leitura "mostrar
+    também os ativos/credenciais dos outros clientes do grupo" é Fase 3).
+    Este teste só confirma que o schema aditivo funciona ponta a ponta:
+    cliente com grupo_id setado continua aceitando credencial normalmente,
+    e o vínculo cliente -> grupo é lido de volta corretamente.
+    """
+    from clientes.models import Credencial, Cliente, Grupo
+
+    grupo = Grupo(nome=f"Grupo Teste {uuid.uuid4().hex[:8]}", observacao="eCar/Guia/Lyon")
+    db_session.session.add(grupo)
+    db_session.session.commit()
+    cliente.grupo_id = grupo.id
+    db_session.session.commit()
+
+    u = criar_usuario(db_session, 'n3')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post('/clientes/credenciais', json={
+            "cliente_id": str(cliente.id), "escopo_tipo": "cliente",
+            "sensibilidade": "operacional", "rotulo": "Wi-Fi loja", "segredo": "senha123",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 201
+        cred = db.session.get(Credencial, uuid.UUID(resp.get_json()['id']))
+        assert cred is not None
+        assert cred.cliente_id == cliente.id
+        cliente_da_credencial = db.session.get(Cliente, cred.cliente_id)
+        assert cliente_da_credencial.grupo_id == grupo.id
+        assert cliente_da_credencial.grupo.nome == grupo.nome
+    finally:
+        db_session.session.delete(u)
+        cliente.grupo_id = None
+        db_session.session.commit()
+        Grupo.query.filter_by(id=grupo.id).delete(synchronize_session=False)
+        db_session.session.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /clientes/<cliente_id>/credenciais — listagem, nunca o segredo
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _criar_credencial_direta(db_session, cliente, sensibilidade, rotulo):
+def _criar_credencial_direta(db_session, cliente, sensibilidade, rotulo,
+                              observacao=None, atributos=None):
     """Gera o id em Python antes de cifrar — mesmo caminho de
     routes.criar_credencial(): o id é o AAD (ver clientes/cifra.py),
-    então precisa existir antes da chamada a cifrar(), não só no insert."""
+    então precisa existir antes da chamada a cifrar(), não só no insert.
+
+    observacao/atributos (Fase 2.1, item 2) são opcionais aqui porque a
+    maioria dos testes que usam este helper não se importa com eles —
+    só os que testam a listagem/revelação de metadados passam valor."""
     from clientes.cifra import cifrar
     from clientes.models import Credencial
     credencial_id = uuid.uuid4()
@@ -260,6 +378,7 @@ def _criar_credencial_direta(db_session, cliente, sensibilidade, rotulo):
         id=credencial_id, cliente_id=cliente.id, escopo_tipo='cliente',
         sensibilidade=sensibilidade, rotulo=rotulo,
         segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
+        observacao=observacao, atributos=atributos or {},
     )
     db_session.session.add(c)
     db_session.session.commit()
@@ -304,6 +423,33 @@ def test_listar_credenciais_n3_ve_administrativa_desbloqueada(client, db_session
                            headers={'Cf-Access-Jwt-Assertion': token})
         corpo = {c['id']: c for c in resp.get_json()}
         assert corpo[str(adm.id)]['bloqueada'] is False
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+def test_listar_credenciais_observacao_e_atributos_aparecem(client, db_session, cliente):
+    """
+    Fase 2.1, item 2: observacao e atributos são metadados de contexto
+    (não segredo) — precisam aparecer na listagem, é o que permite o
+    analista entender o acesso sem revelar a senha. segredo_cifrado/
+    nonce/chave_versao continuam de fora, como já estavam.
+    """
+    cred = _criar_credencial_direta(
+        db_session, cliente, 'operacional', 'Wi-Fi loja',
+        observacao='com limite de velocidade em 10Mbps',
+        atributos={'ssid': 'MILBOM ADM'},
+    )
+    u = criar_usuario(db_session, 'n3')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.get(f'/clientes/{cliente.id}/credenciais',
+                           headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 200
+        corpo = {c['id']: c for c in resp.get_json()}
+        item = corpo[str(cred.id)]
+        assert item['observacao'] == 'com limite de velocidade em 10Mbps'
+        assert item['atributos'] == {'ssid': 'MILBOM ADM'}
     finally:
         db_session.session.delete(u)
         db_session.session.commit()
@@ -361,6 +507,35 @@ def test_revelar_operacional_n1n2_concede(client, db_session, cliente):
         assert log is not None
         assert log.resultado == 'concedido'
         assert log.motivo == 'cliente esqueceu a senha do wifi'
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+def test_revelar_credencial_nao_devolve_observacao_nem_atributos(client, db_session, cliente):
+    """
+    Fase 2.1, item 2: observacao/atributos aparecem na LISTAGEM (ver
+    test_listar_credenciais_observacao_e_atributos_aparecem), mas o
+    endpoint de revelação continua devolvendo só {"segredo": ...} — nunca
+    ganhou mais campos com a Fase 2.1, mesmo pra uma credencial que tem
+    observacao e atributos preenchidos.
+    """
+    cred = _criar_credencial_direta(
+        db_session, cliente, 'operacional', 'Wi-Fi loja',
+        observacao='Gerenciador no pc do Rodolfo',
+        atributos={'ssid': 'MILBOM ADM'},
+    )
+    u = criar_usuario(db_session, 'n1n2')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post(f'/clientes/credenciais/{cred.id}/revelar',
+                            json={"motivo": "conferindo observacao/atributos"},
+                            headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 200
+        corpo = resp.get_json()
+        assert corpo == {"segredo": "segredo-de-teste"}
+        assert 'observacao' not in corpo
+        assert 'atributos' not in corpo
     finally:
         db_session.session.delete(u)
         db_session.session.commit()
