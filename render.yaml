@@ -55,6 +55,16 @@ services:
         sync: false
       - key: MILVUS_API_TOKEN
         sync: false
+      # ---------- Clientes e Processos, Fase 2 — cifra de credenciais ---------
+      # APP_ENCRYPTION_KEY: base64 de 32 bytes aleatórios (44 caracteres,
+      # termina em "="), usada por clientes/cifra.py para AES-256-GCM. Já
+      # configurada no painel do Render (confirmado por Altair, 30/08/2026)
+      # — este campo só documenta a intenção, o painel é quem vale (ver
+      # aviso no topo do arquivo). Trocar essa chave sem migrar
+      # credencial.segredo_cifrado antes torna toda credencial já cifrada
+      # indecifrável — não é rotação simples de env var.
+      - key: APP_ENCRYPTION_KEY
+        sync: false
       # ---------- Cloudflare Access (Fase 1-4) ---------------------------------
       - key: CF_ACCESS_TEAM_DOMAIN
         sync: false          # ex: altcom.cloudflareaccess.com

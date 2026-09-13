@@ -52,6 +52,13 @@ logger = logging.getLogger(__name__)
 CAPACIDADES_N1N2 = frozenset({
     'clientes.ler',
     'clientes.checklist.fechar',
+    # Fase 2, decisão 8 (31/08/2026): "Credencial operacional" é sim para
+    # os três papéis (briefing seção 7) — só a administrativa é N3+. Esta
+    # é a capacidade "fraca" checada pelo decorator da rota de revelação;
+    # a rota faz uma SEGUNDA checagem, em runtime, por
+    # clientes.credencial.admin.revelar quando a credencial encontrada é
+    # sensibilidade='administrativa' — ver clientes/routes.py.
+    'clientes.credencial.operacional.revelar',
 })
 CAPACIDADES_N3 = CAPACIDADES_N1N2 | frozenset({
     'clientes.credencial.admin.revelar',
@@ -113,7 +120,12 @@ def resolver_identidade():
     fail-closed (capacidades vazias), não erro: a checagem de capacidade
     subsequente cuida de negar o acesso.
 
-    Retorna {"email", "papel", "capacidades"}.
+    Retorna {"email", "papel", "capacidades", "usuario_id"}. `usuario_id`
+    (o id de portal.models.Usuario, não confundir com o e-mail) é None
+    quando o e-mail não tem linha ativa em `usuario` — mesmo caso
+    fail-closed de `papel`. Existe pra quem grava audit_log/
+    segredo_acesso_log (clientes/auditoria.py) ter o UUID certo sem
+    consultar `usuario` de novo — Fase 2, não usado na Fase 1.
     """
     token = _extrair_token()
     email = validar_token(token)  # ValueError: token ausente/expirado/inválido
@@ -125,6 +137,7 @@ def resolver_identidade():
         "email": email,
         "papel": papel,
         "capacidades": _capacidades_do_papel(papel),
+        "usuario_id": usuario.id if usuario is not None else None,
     }
 
 
