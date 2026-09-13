@@ -14,8 +14,10 @@ aplicação; credencial não tem equivalente ainda porque rotação (Fase 2)
 é UPDATE, e desativar uma credencial fica para quando essa necessidade
 aparecer de verdade — não inventada agora.
 """
+import logging
 import uuid as uuid_lib
 
+from cryptography.exceptions import InvalidTag
 from flask import Blueprint, jsonify, g, request
 
 from extensoes import db
@@ -23,6 +25,8 @@ from .auth import requer_clientes, tem_capacidade
 from .auditoria import registrar_auditoria, registrar_acesso_segredo
 from .cifra import cifrar, decifrar, ChaveInvalidaError
 from .models import Ativo, AtivoInterface, Credencial, Cliente
+
+logger = logging.getLogger(__name__)
 
 clientes_bp = Blueprint('clientes', __name__, url_prefix='/clientes')
 
@@ -209,22 +213,34 @@ def criar_credencial():
     if escopo_tipo == 'ativo':
         if escopo_id is None:
             return _erro("escopo_id é obrigatório quando escopo_tipo='ativo'", 400)
-        if Ativo.query.get(escopo_id) is None:
-            return _erro("escopo_id não corresponde a nenhum ativo", 400)
+        # Correção pós-entrega da Fase 2, 13/09/2026: Ativo.query.get()
+        # sozinho só confirma que o ativo existe em ALGUM cliente — não
+        # que é deste cliente_id. Sem o filtro por cliente_id, dava para
+        # criar uma credencial com cliente_id do Cliente A apontando para
+        # um ativo do Cliente B, aceito sem erro.
+        if Ativo.query.filter_by(id=escopo_id, cliente_id=cliente_id).first() is None:
+            return _erro("escopo_id não corresponde a nenhum ativo deste cliente", 400)
     elif escopo_tipo == 'sistema' and escopo_id is None:
         # cliente_sistema (briefing 4.3) ainda não existe — sem como
         # validar a referência. Aceito sem checagem, lacuna documentada
         # em clientes/models.py (docstring de Credencial).
         return _erro("escopo_id é obrigatório quando escopo_tipo='sistema'", 400)
 
+    # Gerado em Python, não pelo server_default gen_random_uuid() da
+    # coluna: precisa existir ANTES da cifragem porque é o AAD (ver
+    # clientes/cifra.py) — amarra o ciphertext a esta linha exata, não só
+    # à chave. server_default continua na tabela para inserts feitos fora
+    # da aplicação; só este caminho passa a fornecer o id.
+    credencial_id = uuid_lib.uuid4()
     try:
-        segredo_cifrado, nonce, chave_versao = cifrar(str(segredo))
+        segredo_cifrado, nonce, chave_versao = cifrar(str(segredo), credencial_id.bytes)
     except ChaveInvalidaError as e:
         # Erro de configuração (APP_ENCRYPTION_KEY ausente/errada), não do
         # cliente da API — 500 é o status certo aqui, não 400.
         return _erro(f"não foi possível cifrar: {e}", 500)
 
     credencial = Credencial(
+        id=credencial_id,
         cliente_id=cliente_id,
         escopo_tipo=escopo_tipo,
         escopo_id=escopo_id,
@@ -342,12 +358,29 @@ def revelar_credencial(credencial_id):
         return _erro("Acesso não autorizado", 403)
 
     try:
-        texto_claro = decifrar(credencial.segredo_cifrado, credencial.nonce, credencial.chave_versao)
+        texto_claro = decifrar(
+            credencial.segredo_cifrado, credencial.nonce, credencial.chave_versao,
+            credencial.id.bytes,
+        )
     except ChaveInvalidaError as e:
         # Erro de configuração — não é negação de acesso, não vai para
         # segredo_acesso_log como 'negado' (a pessoa TINHA permissão; o
         # sistema é que não conseguiu decifrar). 500, log de aplicação.
         return _erro(f"não foi possível decifrar: {e}", 500)
+    except InvalidTag:
+        # AAD (credencial.id.bytes) não bateu — ciphertext/nonce não
+        # pertencem a esta linha (movidos de outra credencial, dado
+        # adulterado). NÃO é negação de acesso (a pessoa tinha permissão;
+        # o dado é que está errado) — não vai para segredo_acesso_log como
+        # 'negado', mesmo raciocínio do ChaveInvalidaError acima. Mas ISSO
+        # precisa aparecer diferente no log de aplicação — é sinal de
+        # integridade comprometida, não de configuração.
+        logger.error(
+            "InvalidTag ao decifrar credencial %s — segredo_cifrado/nonce "
+            "não correspondem a este id (AAD não bateu). Possível dado "
+            "corrompido ou movido de outra linha.", credencial.id,
+        )
+        return _erro("falha de integridade ao decifrar esta credencial", 500)
 
     # Concedido: grava ANTES de devolver o valor (briefing 3.2), na mesma
     # transação — se o commit falhar, a resposta também falha, nunca

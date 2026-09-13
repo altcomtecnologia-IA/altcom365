@@ -14,8 +14,10 @@ import base64
 import importlib
 import os
 import secrets
+import uuid
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 import clientes.cifra as cifra
 
@@ -29,49 +31,82 @@ def _reset_cache():
     importlib.reload(cifra)   # deixa limpo pro próximo arquivo de teste também
 
 
+def _aad():
+    """AAD de teste — em produção é sempre credencial.id.bytes (ver
+    docstring de clientes/cifra.py); aqui só precisa ser 16 bytes
+    estáveis por chamada, um uuid4().bytes serve."""
+    return uuid.uuid4().bytes
+
+
 class TestRoundTrip:
 
     def test_cifra_decifra_volta_ao_texto_original(self):
-        ct, nonce, versao = cifra.cifrar("senha-super-secreta-123")
-        assert cifra.decifrar(ct, nonce, versao) == "senha-super-secreta-123"
+        aad = _aad()
+        ct, nonce, versao = cifra.cifrar("senha-super-secreta-123", aad)
+        assert cifra.decifrar(ct, nonce, versao, aad) == "senha-super-secreta-123"
 
     def test_versao_retornada_e_a_atual(self):
-        _, _, versao = cifra.cifrar("x")
+        _, _, versao = cifra.cifrar("x", _aad())
         assert versao == cifra.CHAVE_VERSAO_ATUAL
 
     def test_nonce_tem_12_bytes(self):
-        _, nonce, _ = cifra.cifrar("x")
+        _, nonce, _ = cifra.cifrar("x", _aad())
         assert len(nonce) == 12
 
     def test_nonce_unico_a_cada_chamada(self):
         """GCM com nonce repetido sob a mesma chave é catastrófico — nunca
         pode repetir, nem para o mesmo texto."""
-        _, nonce1, _ = cifra.cifrar("mesmo texto")
-        _, nonce2, _ = cifra.cifrar("mesmo texto")
+        _, nonce1, _ = cifra.cifrar("mesmo texto", _aad())
+        _, nonce2, _ = cifra.cifrar("mesmo texto", _aad())
         assert nonce1 != nonce2
 
     def test_ciphertext_muda_mesmo_com_texto_igual(self):
-        ct1, _, _ = cifra.cifrar("mesmo texto")
-        ct2, _, _ = cifra.cifrar("mesmo texto")
+        ct1, _, _ = cifra.cifrar("mesmo texto", _aad())
+        ct2, _, _ = cifra.cifrar("mesmo texto", _aad())
         assert ct1 != ct2   # nonce diferente garante isso
 
     def test_nonce_trocado_nao_decifra(self):
         """Prova que GCM detecta nonce errado (autenticação, não só
         confidencialidade) — não silenciosamente devolve lixo."""
-        ct, _, versao = cifra.cifrar("x")
-        _, outro_nonce, _ = cifra.cifrar("y")
+        aad = _aad()
+        ct, _, versao = cifra.cifrar("x", aad)
+        _, outro_nonce, _ = cifra.cifrar("y", aad)
         with pytest.raises(Exception):
-            cifra.decifrar(ct, outro_nonce, versao)
+            cifra.decifrar(ct, outro_nonce, versao, aad)
 
     def test_chave_versao_diferente_de_1_recusa(self):
-        ct, nonce, _ = cifra.cifrar("x")
+        aad = _aad()
+        ct, nonce, _ = cifra.cifrar("x", aad)
         with pytest.raises(cifra.ChaveInvalidaError):
-            cifra.decifrar(ct, nonce, 2)
+            cifra.decifrar(ct, nonce, 2, aad)
 
     def test_texto_com_unicode(self):
         original = "sênh@ cöm acentuação e emoji 🔒"
-        ct, nonce, versao = cifra.cifrar(original)
-        assert cifra.decifrar(ct, nonce, versao) == original
+        aad = _aad()
+        ct, nonce, versao = cifra.cifrar(original, aad)
+        assert cifra.decifrar(ct, nonce, versao, aad) == original
+
+
+class TestAAD:
+    """
+    Correção pós-entrega da Fase 2, 13/09/2026 — ver docstring do módulo:
+    aad amarra o ciphertext à linha exata (credencial.id em produção), não
+    só à chave. Sem isso, um ciphertext+nonce movidos de uma credencial
+    para outra decifrariam normalmente, devolvendo o segredo errado no
+    contexto errado.
+    """
+
+    def test_aad_trocado_nao_decifra(self):
+        ct, nonce, versao = cifra.cifrar("segredo", _aad())
+        with pytest.raises(InvalidTag):
+            cifra.decifrar(ct, nonce, versao, _aad())   # aad diferente do usado em cifrar()
+
+    def test_aad_correto_decifra(self):
+        """Prova que o teste acima falha pelo aad errado, não por algo
+        mais — o mesmo aad de volta funciona normalmente."""
+        aad = _aad()
+        ct, nonce, versao = cifra.cifrar("segredo", aad)
+        assert cifra.decifrar(ct, nonce, versao, aad) == "segredo"
 
 
 class TestFormatoDaChave:
@@ -80,20 +115,20 @@ class TestFormatoDaChave:
         monkeypatch.delenv('APP_ENCRYPTION_KEY', raising=False)
         importlib.reload(cifra)
         with pytest.raises(cifra.ChaveInvalidaError, match="não está definida"):
-            cifra.cifrar("x")
+            cifra.cifrar("x", _aad())
 
     def test_chave_tamanho_errado_recusa(self, monkeypatch):
         chave_16_bytes = base64.b64encode(secrets.token_bytes(16)).decode()
         monkeypatch.setenv('APP_ENCRYPTION_KEY', chave_16_bytes)
         importlib.reload(cifra)
         with pytest.raises(cifra.ChaveInvalidaError, match="16 bytes"):
-            cifra.cifrar("x")
+            cifra.cifrar("x", _aad())
 
     def test_chave_base64_invalido_recusa(self, monkeypatch):
         monkeypatch.setenv('APP_ENCRYPTION_KEY', 'isto nao e base64 valido!!!')
         importlib.reload(cifra)
         with pytest.raises(cifra.ChaveInvalidaError, match="base64"):
-            cifra.cifrar("x")
+            cifra.cifrar("x", _aad())
 
     def test_chave_no_formato_documentado_funciona(self, monkeypatch):
         """
@@ -106,5 +141,6 @@ class TestFormatoDaChave:
         assert chave.endswith('=')
         monkeypatch.setenv('APP_ENCRYPTION_KEY', chave)
         importlib.reload(cifra)
-        ct, nonce, versao = cifra.cifrar("funciona")
-        assert cifra.decifrar(ct, nonce, versao) == "funciona"
+        aad = _aad()
+        ct, nonce, versao = cifra.cifrar("funciona", aad)
+        assert cifra.decifrar(ct, nonce, versao, aad) == "funciona"

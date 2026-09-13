@@ -178,12 +178,16 @@ def test_erro_inesperado_na_validacao_vira_403_nao_500(client, monkeypatch):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _criar_credencial_direta(db_session, cliente, sensibilidade):
+    """Gera o id em Python antes de cifrar — o id é o AAD (ver
+    clientes/cifra.py), mesmo caminho de routes.criar_credencial()."""
     from clientes.cifra import cifrar
     from clientes.models import Credencial
-    ct, nonce, versao = cifrar('segredo-d4')
+    credencial_id = uuid.uuid4()
+    ct, nonce, versao = cifrar('segredo-d4', credencial_id.bytes)
     c = Credencial(
-        cliente_id=cliente.id, escopo_tipo='cliente', sensibilidade=sensibilidade,
-        rotulo='Credencial D4', segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
+        id=credencial_id, cliente_id=cliente.id, escopo_tipo='cliente',
+        sensibilidade=sensibilidade, rotulo='Credencial D4',
+        segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
     )
     db_session.session.add(c)
     db_session.session.commit()

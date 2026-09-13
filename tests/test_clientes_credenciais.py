@@ -209,17 +209,57 @@ def test_criar_credencial_escopo_ativo_id_inexistente(client, db_session, client
         db_session.session.commit()
 
 
+def test_criar_credencial_escopo_ativo_de_outro_cliente_nega(client, db_session, cliente):
+    """
+    Correção pós-entrega da Fase 2, 13/09/2026: escopo_id precisa
+    pertencer ao cliente_id do mesmo request — um ativo que existe, mas
+    é de outro cliente, tem que ser recusado como se não existisse
+    (mesmo 400 de "não corresponde a nenhum ativo").
+    """
+    from clientes.models import Ativo, Cliente
+
+    outro_cnpj = str(uuid.uuid4().int)[:14].ljust(14, '0')
+    outro_cliente = Cliente(razao_social=f"Outro Cliente {outro_cnpj}", cnpj=outro_cnpj)
+    db_session.session.add(outro_cliente)
+    db_session.session.commit()
+    ativo_de_outro = Ativo(cliente_id=outro_cliente.id, tipo='switch', apelido='SW-outro')
+    db_session.session.add(ativo_de_outro)
+    db_session.session.commit()
+
+    u = criar_usuario(db_session, 'gestor')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post('/clientes/credenciais', json={
+            "cliente_id": str(cliente.id), "escopo_tipo": "ativo",
+            "escopo_id": str(ativo_de_outro.id),
+            "sensibilidade": "operacional", "rotulo": "x", "segredo": "y",
+        }, headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 400
+        assert 'nenhum ativo' in resp.get_json()['erro']
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+        Ativo.query.filter_by(id=ativo_de_outro.id).delete(synchronize_session=False)
+        Cliente.query.filter_by(id=outro_cliente.id).delete(synchronize_session=False)
+        db_session.session.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /clientes/<cliente_id>/credenciais — listagem, nunca o segredo
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _criar_credencial_direta(db_session, cliente, sensibilidade, rotulo):
+    """Gera o id em Python antes de cifrar — mesmo caminho de
+    routes.criar_credencial(): o id é o AAD (ver clientes/cifra.py),
+    então precisa existir antes da chamada a cifrar(), não só no insert."""
     from clientes.cifra import cifrar
     from clientes.models import Credencial
-    ct, nonce, versao = cifrar('segredo-de-teste')
+    credencial_id = uuid.uuid4()
+    ct, nonce, versao = cifrar('segredo-de-teste', credencial_id.bytes)
     c = Credencial(
-        cliente_id=cliente.id, escopo_tipo='cliente', sensibilidade=sensibilidade,
-        rotulo=rotulo, segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
+        id=credencial_id, cliente_id=cliente.id, escopo_tipo='cliente',
+        sensibilidade=sensibilidade, rotulo=rotulo,
+        segredo_cifrado=ct, nonce=nonce, chave_versao=versao,
     )
     db_session.session.add(c)
     db_session.session.commit()
@@ -361,6 +401,47 @@ def test_revelar_administrativa_n3_concede(client, db_session, cliente):
                             headers={'Cf-Access-Jwt-Assertion': token})
         assert resp.status_code == 200
         assert resp.get_json()['segredo'] == 'segredo-de-teste'
+    finally:
+        db_session.session.delete(u)
+        db_session.session.commit()
+
+
+def test_revelar_ciphertext_movido_de_outra_credencial_falha_integridade(client, db_session, cliente):
+    """
+    O cenário que motivou a AAD (correção pós-entrega, 13/09/2026): mover
+    segredo_cifrado+nonce de uma credencial administrativa para uma linha
+    operacional do MESMO cliente não pode devolver o segredo pelo caminho
+    fraco. Sem AAD, a decifra passaria normal (mesma chave, chave_versao
+    igual) e um n1n2 revelaria o segredo administrativo via a credencial
+    operacional. Com AAD = credencial.id, o id não bate — InvalidTag
+    interrompe a decifra: 500 de integridade, não 403 de permissão, e não
+    é confundido com negação de acesso no log.
+    """
+    from portal.models import SegredoAcessoLog
+
+    admin_cred = _criar_credencial_direta(db_session, cliente, 'administrativa', 'Firewall admin')
+    op_cred = _criar_credencial_direta(db_session, cliente, 'operacional', 'Wi-Fi loja')
+
+    # Simula o ataque: ciphertext/nonce da credencial administrativa
+    # "vazam" para a linha operacional — exatamente o que a AAD tem que
+    # impedir de decifrar.
+    op_cred.segredo_cifrado = admin_cred.segredo_cifrado
+    op_cred.nonce = admin_cred.nonce
+    db_session.session.commit()
+
+    u = criar_usuario(db_session, 'n1n2')
+    try:
+        token = fazer_token(email=u.email)
+        resp = client.post(f'/clientes/credenciais/{op_cred.id}/revelar',
+                            json={"motivo": "tentando o caminho fraco"},
+                            headers={'Cf-Access-Jwt-Assertion': token})
+        assert resp.status_code == 500
+        assert 'segredo' not in resp.get_json()
+
+        # Erro de integridade não é negação de acesso — não gera linha em
+        # segredo_acesso_log (mesmo padrão já usado para ChaveInvalidaError).
+        log = SegredoAcessoLog.query.filter_by(credencial_id=op_cred.id).first()
+        assert log is None
     finally:
         db_session.session.delete(u)
         db_session.session.commit()
