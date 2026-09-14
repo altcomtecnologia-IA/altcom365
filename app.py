@@ -442,12 +442,23 @@ def api_dados_visualizacao():
     n_desat    = sess_data['n_desatualizadas']
     pct_desat  = sess_data['pct_desatualizadas']
 
+    # Quarentena: dispositivos em acompanhamento são excluídos da visualização
+    try:
+        _q_ativas = quarentena_ops.get_ativas_set()
+    except Exception:
+        _q_ativas = set()
+
     clientes   = sorted(df['NOME FANTASIA DO CLIENTE'].dropna().unique().tolist())
     resultado  = []
     snaps_buf  = []
 
     for cliente in clientes:
         df_cli     = df[df['NOME FANTASIA DO CLIENTE'] == cliente].copy()
+        # Remove dispositivos em quarentena ativa da visualização principal
+        if _q_ativas:
+            df_cli = df_cli[~df_cli['NOME DO DISPOSITIVO'].astype(str).apply(
+                lambda d, _c=cliente: (d, _c) in _q_ativas
+            )]
         df_alertas = calcular_alertas(df_cli, versao_ref)
         df_norm    = normalize_df(df_alertas)
 
