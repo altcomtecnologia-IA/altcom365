@@ -2,7 +2,7 @@
 Altcom 365 – Engine de Classificação de Eficiência Técnica v5
 Fonte: Tabela_de_processadores_para_laudo_de_eficiencia_2026.xlsx (revisada)
 Regras de sufixo:
-  - Uso armazenamento >70%    → classif + " - Man. Prev." (cor inalterada)
+  - Uso armazenamento >90%    → classif + " - Man. Prev." (cor inalterada)
   - SO<Win11 / RAM<8 / SSD<200 → classif + " - Upgrade"   (cor inalterada)
   - Ambos                     → " - Upgrade" tem prioridade
 """
@@ -114,9 +114,13 @@ def parse_cpu(proc: str) -> tuple:
     if rm:
         return f'ryzen{rm.group(1)}', int(rm.group(2)), ''
 
-    # Intel N-series (low-power)
-    if re.search(r'i3-n\d+|core.*\bn\d{3,4}\b', p):
-        return 'n-series', 0, ''
+    # Intel N-series — distingue N100/N200 (budget) de N300/N305 (Alder Lake N, capaz)
+    nm = re.search(r'i3-n(\d+)|core.*\bn(\d{3,4})\b', p)
+    if nm:
+        n_num = int(nm.group(1) or nm.group(2))
+        if n_num >= 300:
+            return 'n-series-capable', 0, ''  # N300/N305 = Alder Lake N capaz
+        return 'n-series', 0, ''              # N100/N200 = budget low-power
 
     # Gen tag explícita: "11th Gen ... i5-1135G7"
     gm = re.search(r'(\d+)(?:th|nd|rd|st)\s+gen.*?i([3579])-(\d{3,5})([a-z]*)', p)
@@ -143,8 +147,9 @@ def base_tier(dev: str, proc: str) -> int:
     if familia.startswith('ryzen'):
         return 3 if gen >= 5 else 2
 
-    # Intel N-series = CRÍTICO
-    if familia == 'n-series': return 0
+    # Intel N-series
+    if familia == 'n-series': return 0           # N100/N200 = CRÍTICO
+    if familia == 'n-series-capable': return 2   # N300/N305 = BOM
 
     if familia == 'unknown' or gen == 0: return 0
 
@@ -212,10 +217,10 @@ def classify(row) -> pd.Series:
     classif_base = TIER_LABELS[tier]
 
     # ── Penalidades: detectar situações que geram sufixo ─────────────────────
-    # Uso >70%    → "- Man. Prev."
+    # Uso >90%    → "- Man. Prev."
     # SO/RAM/SSD  → "- Upgrade"
     # Upgrade tem prioridade sobre Man. Prev.
-    uso_alto = uso is not None and uso > 70
+    uso_alto = uso is not None and uso > 90
 
     pen_upgrade = []
     if win_old:       pen_upgrade.append(('so',  "Necessário fazer upgrade para Windows 11."))
@@ -255,7 +260,7 @@ def classify(row) -> pd.Series:
 
     # Texto de uso alto
     if uso_alto:
-        if uso is not None and uso >= 85:
+        if uso is not None and uso >= 95:
             desc.append("Armazenamento em nível crítico — limpeza urgente necessária.")
             sugs.append("Limpeza de armazenamento urgente")
         else:
