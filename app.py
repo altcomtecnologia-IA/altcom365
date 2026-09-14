@@ -1386,7 +1386,8 @@ def quarentena_ativas():
     try:
         return jsonify({'ativas': quarentena_ops.get_ativas_lista()})
     except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+        logger.exception('quarentena_ativas: erro ao listar')
+        return jsonify({'ativas': [], 'erro': str(e)}), 500
 
 
 @app.route('/quarentena/historico/<dispositivo>/<cliente>', methods=['GET'])
