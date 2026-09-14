@@ -606,6 +606,7 @@ function filterTable(tabId){
 let _historyLoaded = {};
 
 function activateTab(idx){
+  sessionStorage.setItem('altcom365_tab', idx);
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
@@ -775,6 +776,10 @@ async function init(){
     _historyLoaded[0] = true;
     loadHistory(0);
 loadQuarentenas();
+
+    // Restaurar aba ativa após reload de quarentena
+    const _savedTab = sessionStorage.getItem('altcom365_tab');
+    if(_savedTab !== null){ sessionStorage.removeItem('altcom365_tab'); activateTab(parseInt(_savedTab)); }
 
     // Show main content
     document.getElementById('loading-screen').style.display='none';
@@ -977,6 +982,7 @@ if(!r.ok){
 }
 const data=await r.json();
 const ativas=data.ativas||[];
+console.log('[quarentena] total ativas:', ativas.length, ativas.length?JSON.stringify(ativas[0]):'(vazio)');
 const byCliente={};
 ativas.forEach(q=>{if(!byCliente[q.cliente])byCliente[q.cliente]=[];byCliente[q.cliente].push(q);});
 _clientNames.forEach((nome,idx)=>{
