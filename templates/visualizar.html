@@ -966,6 +966,15 @@ function fecharFiltroPainel(){
 async function loadQuarentenas(){
 try{
 const r=await fetch('/quarentena/ativas');
+if(!r.ok){
+  const txt=await r.text();
+  console.error('loadQuarentenas HTTP',r.status,txt);
+  _clientNames.forEach((_,idx)=>{
+    const el=document.getElementById('qlist-body-'+idx);
+    if(el) el.innerHTML='<p class="history-empty" style="color:#ff9999">Erro '+r.status+' ao carregar acompanhamento.</p>';
+  });
+  return;
+}
 const data=await r.json();
 const ativas=data.ativas||[];
 const byCliente={};
