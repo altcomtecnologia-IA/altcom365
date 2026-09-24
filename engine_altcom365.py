@@ -13,7 +13,8 @@ import re, pandas as pd
 # ══════════════════════════════════════════════════════════════════════════════
 BADGE_COLORS = {
     "CRÍTICO":      ("C00000", "FFFFFF"),   # vermelho escuro / texto branco
-    "SATISFATÓRIO": ("FFC000", "000000"),   # amarelo / texto preto
+    "SATISFATÓRIO":        ("FFC000", "000000"),   # amarelo / texto preto
+    "SATISFATÓRIO-Upgrade": ("FFC000", "000000"),   # SATISFATÓRIO + RAM 8 GB
     "BOM":          ("92D050", "000000"),   # verde claro / texto preto
     "ÓTIMO":        ("00B050", "FFFFFF"),   # verde escuro / texto branco
     "EXCELENTE":    ("00B0F0", "000000"),   # azul / texto preto
@@ -75,6 +76,7 @@ DURABILIDADE = {0:"Troca", 1:"2026/2027", 2:"2027/2028", 3:"2028/2029", 4:"2029/
 PRECO_SUBST   = "Usado configuração mínima +/- R$ 1.700,00 - Novo R$ 2.900,00"
 PRECO_WIN11   = "R$ 145,00"
 PRECO_RAM_8   = "R$ 120,00 (módulo 8 GB)"
+PRECO_RAM_16  = "R$ 180,00 (módulo 8 GB DDR4 — upgrade para 16 GB)"
 PRECO_SSD_240 = "R$ 180,00 (SSD 240 GB)"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -213,6 +215,15 @@ def classify(row) -> pd.Series:
     if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16:
         tier = 4
 
+    # ── Downgrade de 8 GB RAM ──────────────────────────────────────────────────
+    # 8 GB passou a ser insuficiente para uso corporativo.
+    # Regra: reduz 1 tier. SATISFATÓRIO (1) + 8 GB → badge "SATISFATÓRIO-Upgrade".
+    # CRÍTICO (0) já retornou acima e não é afetado.
+    ram8_downgrade = (ram == 8)
+    if ram8_downgrade and tier >= 2:
+        tier -= 1
+
+
     # ── Classificação base final (tier não muda mais após aqui) ──────────────
     classif_base = TIER_LABELS[tier]
 
@@ -227,21 +238,25 @@ def classify(row) -> pd.Series:
     if ram < 8:       pen_upgrade.append(('ram', "Memória RAM abaixo do mínimo recomendado (8 GB)."))
     if storage < 200: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (220 GB)."))
 
-    if pen_upgrade:
-        sufixo = " - Upgrade"
+    if ram8_downgrade and tier == 1:
+        # SATISFATÓRIO com RAM 8 GB → badge especial (não caiu para CRÍTICO)
+        badge = "SATISFATÓRIO-Upgrade"
+    elif pen_upgrade:
+        badge = classif_base + " - Upgrade"
     elif uso_alto:
-        sufixo = " - Man. Prev."
+        badge = classif_base + " - Man. Prev."
     else:
-        sufixo = ""
-
-    badge = classif_base + sufixo
+        badge = classif_base
 
     # ── Monta descritivo e sugestões ─────────────────────────────────────────
     desc  = []
     sugs  = []
     precs = []
 
-    if tier == 4:
+    if ram8_downgrade:
+        desc.append("Hardware aceito. Recomenda-se upgrade de RAM para 16 GB para garantir desempenho imediato.")
+        sugs.append("Upgrade RAM para 16 GB"); precs.append(PRECO_RAM_16)
+    elif tier == 4:
         desc.append("Configuração de alto desempenho, totalmente alinhada ao padrão corporativo.")
     elif tier == 1:
         desc.append("Configuração funcional dentro dos parâmetros mínimos.")
