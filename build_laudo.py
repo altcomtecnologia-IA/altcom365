@@ -446,11 +446,12 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         ("CRÍTICO",      "CPU obsoleta — substituição necessária", "—"),
         ("",             "", ""),
         ("Sufixo",       "Condição",                       "Ação recomendada"),
-        ("- Upgrade",    "RAM < 8 GB ou SSD < 200 GB",    "Upgrade de componente"),
+        ("- Upgrade",    "RAM < 8 GB ou SSD < 200 GB",        "Upgrade de componente"),
+        ("SATISFATÓRIO-Upgrade", "SATISFATÓRIO com RAM de 8 GB", "Upgrade de RAM para 16 GB"),
     ]
     for ri, (a, b, c_val) in enumerate(legend_rows, 3):
         ws3.row_dimensions[ri].height = 22
-        if ri in (3, 11):
+        if a in ('Classificação', 'Sufixo', '- Upgrade'):
             for ci, v in enumerate([a, b, c_val], 1): hdr(ws3, ri, ci, v)
         elif a in BADGE_COLORS:
             bg, fg = BADGE_COLORS[a]
@@ -764,7 +765,7 @@ def build_relatorio_desempenho(df_all, output_path):
     has_cpu = df_all.get('_alerta_cpu', pd.Series([''] * len(df_all))).str.len() > 0
     df_perf = df_all[has_ram | has_cpu].copy()
 
-    HEADERS = ['Cliente', 'Dispositivo', 'Apelido', 'Tipo', 'Processador',
+    HEADERS = ['Cliente', 'Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Processador',
                'RAM', 'Uso RAM %', 'Uso CPU %', 'S.O.', 'Data Atualização',
                'Alerta RAM', 'Alerta CPU']
     NCOLS = len(HEADERS)
@@ -810,6 +811,7 @@ def build_relatorio_desempenho(df_all, output_path):
             (str(row.get('Cliente', '')),                   'left'),
             (str(row.get('Nome do dispositivo', '')),        'left'),
             (str(row.get('Apelido', '')) or '—',            'left'),
+            (str(row.get('Usuário logado', '')) or '—',     'left'),
             (tipo_label,                                     'center'),
             (str(row.get('Processador', '')),                'left'),
             (str(row.get('Memória RAM total', '')),          'center'),
@@ -837,7 +839,7 @@ def build_relatorio_desempenho(df_all, output_path):
             c.border    = brd()
             ci += 1
 
-    for i, w in enumerate([28, 20, 16, 8, 36, 8, 10, 10, 26, 14, 18, 18], 1):
+    for i, w in enumerate([28, 20, 16, 16, 8, 36, 8, 10, 10, 26, 14, 18, 18], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
     wb.save(output_path)
