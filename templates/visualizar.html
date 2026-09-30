@@ -371,9 +371,9 @@ function classifBadge(c){
 function alertBadges(alertas){
   if(!alertas||!alertas.length) return '<span style="color:var(--gray4);font-size:11px">—</span>';
   return alertas.map(a=>{
-    const icons={'armazenamento':'💾','windows':'🪟','sem_contato':'📡','milvus':'🔄'};
+    const icons={'armazenamento':'💾','windows':'🪟','sem_contato':'📡','milvus':'🔄','uptime':'🕐'};
     const icon = icons[a.tipo]||'⚠';
-    return `<span class="alert-badge alert-${escHtml(a.tipo)}" title="${escHtml(a.msg)}">${icon} ${escHtml(a.tipo==='armazenamento'?'Armaz.':a.tipo==='sem_contato'?'Sem contato':a.tipo==='windows'?'Windows':'Milvus')}</span>`;
+    return `<span class="alert-badge alert-${escHtml(a.tipo)}" title="${escHtml(a.msg)}">${icon} ${escHtml(a.tipo==='armazenamento'?'Armaz.':a.tipo==='sem_contato'?'Sem contato':a.tipo==='windows'?'Windows':a.tipo==='uptime'?'UpTime':'Milvus')}</span>`;
   }).join('');
 }
 
@@ -802,7 +802,7 @@ const FILTRO_DEFS = [
   {tipo:'windows',        icon:'🪟', lbl:'Upgrade S.O 10→11',   bg:'#003D5C', fg:'#00B0F0'},
   {tipo:'sem_contato',    icon:'📡', lbl:'Desconectadas',        bg:'#3D0000', fg:'#FF6B6B'},
   {tipo:'atualizar_agente', icon:'🛠️', lbl:'Atualizar Agente',   bg:'#1A0A3A', fg:'#B39DDB'},
-  {tipo:'uptime',           icon:'🔄', lbl:'Reiniciar',           bg:'#1A3A5C', fg:'#AED6F1'},
+  {tipo:'uptime',           icon:'🔄', lbl:'UpTime',           bg:'#1A3A5C', fg:'#AED6F1'},
 ];
 
 function _contarFiltro(clientes, tipo){
@@ -869,7 +869,9 @@ function ativarFiltro(tipo, label){
       if(match){
         const al = (tipo === 'critico')
           ? '<span style="color:#FF6B6B;font-weight:700">Laudado para Troca</span>'
-          : alertBadges(d.alertas.filter(a => a.tipo === (tipo === 'atualizar_agente' ? 'milvus' : tipo)));
+          : (tipo === 'uptime')
+            ? (() => { const ua = (d.alertas||[]).find(a=>a.tipo==='uptime'); return ua ? `<span style="color:#AED6F1;font-size:11px;font-weight:600">🕐 ${escHtml(ua.msg)}</span>` : '—'; })()
+            : alertBadges(d.alertas.filter(a => a.tipo === (tipo === 'atualizar_agente' ? 'milvus' : tipo)));
         linhas.push(`
           <tr>
             <td class="hostname">${escHtml(d.hostname)}</td>
