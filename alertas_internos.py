@@ -333,7 +333,7 @@ def calcular_alertas(df, versao_ref=None):
     else:
         df['_alerta_uptime'] = ""
 
-        # Flag geral
+    # Flag geral
     df['_tem_alerta'] = (
         (df['_alerta_armazenamento'].str.len() > 0) |
         (df['_alerta_windows'].str.len()       > 0) |
@@ -390,6 +390,7 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
     n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
     n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
     n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_uptime  = int(((df_a.get('_alerta_uptime', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
     n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
 
     milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
