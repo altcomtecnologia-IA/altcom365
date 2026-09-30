@@ -65,6 +65,7 @@ ALERT_COLORS = {
     'troca':         ("F9E6E6", "922B21"),
     'ram':           ("FFE5CC", "B7500A"),
     'cpu':           ("FDEBD0", "784212"),
+    'uptime':        ("E8F4FD", "1A5276"),
 }
 
 
@@ -144,7 +145,7 @@ COL_MAP_SERVIDORES = {
     'LOCALIZAÇÃO':                      'Localização',
     'DATA DE COMPRA':                   'Data de compra',
     'DATA DE GARANTIA':                 'Data de garantia',
-    'UPTIME (TEMPO DE ATIVIDADE)':      'Uptime (tempo de atividade)',
+    'UPTIME (TEMPO DE ATIVIDADE)':      'Uptime',
     'NOME FANTASIA DO CLIENTE':         'Nome fantasia do cliente',
     'MÁQUINA VIRTUAL':                  'Máquina virtual',
     'SERVIDOR':                         'Servidor',
@@ -520,6 +521,32 @@ def _fmt_pct(val):
     return f"{val:.0f}%"
 
 
+def _fmt_uptime(val):
+    """Formata o valor de Uptime para exibição em dias (ex: '5 dias') ou 'N/D'."""
+    import datetime as _dt
+    if val is None or (isinstance(val, float) and __import__('pandas').isna(val)):
+        return 'N/D'
+    if isinstance(val, _dt.timedelta):
+        h = val.total_seconds() / 3600
+    else:
+        s = str(val).strip()
+        if not s or s.lower() in ('nan', 'nao possui', ''):
+            return 'N/D'
+        parts = s.split(':')
+        if len(parts) == 2:
+            try:
+                h = int(parts[0]) + int(parts[1]) / 60
+            except ValueError:
+                return 'N/D'
+        else:
+            return 'N/D'
+    dias = int(h // 24)
+    horas_rest = int(h % 24)
+    if dias > 0:
+        return f"{dias}d {horas_rest}h"
+    return f"{horas_rest}h"
+
+
 def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None, historico_set=None, em_acompanhamento=None):
     """
     Gera o relatório interno para a equipe Altcom (Excel 1 aba).
@@ -593,10 +620,10 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
     # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
                'S.O.', 'Processador', 'RAM', 'Uso RAM %', 'Uso CPU %', 'Armazenamento', 'Uso %',
-               'Data Atualização', 'Versão Agente',
+               'Data Atualização', 'Uptime', 'Versão Agente',
                'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
-               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Já tratado']
+               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Alerta Uptime', 'Já tratado']
     NCOLS = len(HEADERS)
 
     wb = Workbook()
@@ -659,6 +686,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
             (st_s,         'center'),
             (uso_s,        'center'),
             (data_at_val if HAS_DATA_AT else 'N/D', 'center'),
+            (_fmt_uptime(row.get('Uptime')),           'center'),
             (versao_val  if HAS_VERSAO  else 'N/D', 'center'),
         ]
         ci = 1
@@ -687,6 +715,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
             (str(row.get('_alerta_milvus', '')),        'milvus'),
             (str(row.get('_alerta_ram',  '')),          'ram'),
             (str(row.get('_alerta_cpu',  '')),          'cpu'),
+            (str(row.get('_alerta_uptime', '')),        'uptime'),
         ]
         for v, color_key in alert_vals:
             bg, fc = ALERT_COLORS[color_key]
@@ -713,7 +742,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
             ci += 1
 
     # -- Larguras --------------------------------------------------------------
-    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 22, 18, 28, 26, 14]
+    widths = [22, 16, 16, 9, 20, 22, 34, 8, 14, 7, 18, 16, 16, 12, 22, 18, 28, 26, 22, 14]
     for ci, w in enumerate(widths[:NCOLS], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = 'A5'
