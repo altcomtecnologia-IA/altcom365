@@ -53,6 +53,30 @@ def _parse_data_at(val):
         return None
 
 
+def _parse_uptime_hours(val):
+    """Converte o campo UPTIME (TEMPO DE ATIVIDADE) do Milvus para horas (float).
+    Suporta dois formatos:
+      - string 'H:MM' ou 'HH:MM'  (ex: '8:18' -> 8.3h)
+      - datetime.timedelta          (ex: timedelta(days=5, seconds=31800) -> 128.8h)
+    Retorna None se nao puder interpretar.
+    """
+    import datetime as _dt
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if isinstance(val, _dt.timedelta):
+        return val.total_seconds() / 3600
+    s = str(val).strip()
+    if not s or s.lower() in ('nan', 'nao possui', 'nao tem', ''):
+        return None
+    parts = s.split(':')
+    if len(parts) == 2:
+        try:
+            return int(parts[0]) + int(parts[1]) / 60
+        except ValueError:
+            return None
+    return None
+
+
 def _ver_tuple(v):
     """
     '110.0.0.4' -> (110, 0, 0, 4) para comparacao semantica correta.
@@ -295,14 +319,29 @@ def calcular_alertas(df, versao_ref=None):
         ), axis=1
     )
 
-    # Flag geral
+    # 6. Uptime > 72 horas — indica máquina que precisa ser reiniciada
+    def _uptime_alerta(val):
+        h = _parse_uptime_hours(val)
+        if h is None or h <= 72:
+            return ""
+        dias = int(h // 24)
+        return f"{dias} dias sem reiniciar — reiniciar recomendado"
+
+    col_uptime = 'UPTIME (TEMPO DE ATIVIDADE)'
+    if col_uptime in df.columns:
+        df['_alerta_uptime'] = df[col_uptime].apply(_uptime_alerta)
+    else:
+        df['_alerta_uptime'] = ""
+
+        # Flag geral
     df['_tem_alerta'] = (
         (df['_alerta_armazenamento'].str.len() > 0) |
         (df['_alerta_windows'].str.len()       > 0) |
         (df['_alerta_sem_contato'].str.len()   > 0) |
         (df['_alerta_milvus'].str.len()        > 0) |
         (df['_alerta_ram'].str.len()           > 0) |
-        (df['_alerta_cpu'].str.len()           > 0)
+        (df['_alerta_cpu'].str.len()           > 0) |
+        (df['_alerta_uptime'].str.len()        > 0)
     )
     return df
 
@@ -371,6 +410,7 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
             'laudados_troca': n_troca,
             'ram_alerta':     n_ram,
             'cpu_alerta':     n_cpu,
+            'uptime_alerta':  n_uptime,
             'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
             'tem_versao':     versao_ref is not None,
         },
