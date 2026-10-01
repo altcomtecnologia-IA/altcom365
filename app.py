@@ -199,8 +199,6 @@ def upload_completo():
 
         # Filtros automáticos
         df = df[df['EXCLUÍDO'].astype(str).str.upper() != 'SIM']
-        df = df[~df['NOME FANTASIA DO CLIENTE'].astype(str).str.lower()
-                  .str.contains('altcom', na=False)]
         # Remove servidores (qualquer critério basta)
         df = df[~df['PROCESSADOR'].astype(str).str.contains('Xeon', case=False, na=False)]
         if 'SERVIDOR' in df.columns:
@@ -875,8 +873,6 @@ def sincronizar_milvus():
 
         # Mesmos filtros automáticos de /upload-completo
         df = df[df['EXCLUÍDO'].astype(str).str.upper() != 'SIM']
-        df = df[~df['NOME FANTASIA DO CLIENTE'].astype(str).str.lower()
-                  .str.contains('altcom', na=False)]
         # Remove servidores
         df = df[~df['PROCESSADOR'].astype(str).str.contains('Xeon', case=False, na=False)]
         if 'SERVIDOR' in df.columns:
