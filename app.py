@@ -476,6 +476,7 @@ def api_dados_visualizacao():
                 ('_alerta_ram',           'ram'),
                 ('_alerta_cpu',           'cpu'),
                 ('_alerta_uptime',        'uptime'),
+                ('_alerta_antivirus',    'antivirus'),
             ]:
                 val = row.get(col, '')
                 if val:
