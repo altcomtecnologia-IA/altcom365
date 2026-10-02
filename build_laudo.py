@@ -40,6 +40,10 @@ COL_MAP_NOVO = {
     'USUÁRIO LOGADO':              'Usuário logado',
     'DATA DE ATUALIZAÇÃO':         'Data de atualização',
     'VERSÃO DO CLIENT':            'Versão do client',
+    'ANTIVÍRUS':                   'Antivírus',
+    'SISTEMA OPERACIONAL DESATUALIZADO': 'SO Desatualizado',
+    'SERVIDOR':                    'Servidor',
+    'MÁQUINA VIRTUAL':             'Máquina Virtual',
     'MODELO':                      'Modelo',
     'NÚMERO DO SERIAL':             'Número do serial',
     'PLACA MÃE':                   'Placa mãe',
@@ -66,6 +70,7 @@ ALERT_COLORS = {
     'ram':           ("FFE5CC", "B7500A"),
     'cpu':           ("FDEBD0", "784212"),
     'uptime':        ("E8F4FD", "1A5276"),
+    'antivirus':     ("FDECEA", "922B21"),
 }
 
 
@@ -620,10 +625,10 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
     # -- Cabeçalho Excel -------------------------------------------------------
     HEADERS = ['Dispositivo', 'Apelido', 'Usuário Logado', 'Tipo', 'Cliente',
                'S.O.', 'Processador', 'RAM', 'Uso RAM %', 'Uso CPU %', 'Armazenamento', 'Uso %',
-               'Data Atualização', 'Uptime', 'Versão Agente',
+               'Data Atualização', 'Uptime', 'Antivírus', 'Versão Agente',
                'Crítica/Troca',
                'Alerta Armazenamento', 'Alerta Windows',
-               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Alerta Uptime', 'Já tratado']
+               'Alerta Sem Contato', 'Alerta Agente Milvus', 'Alerta RAM', 'Alerta CPU', 'Alerta Uptime', 'Alerta Antivírus', 'Já tratado']
     NCOLS = len(HEADERS)
 
     wb = Workbook()
@@ -687,6 +692,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
             (uso_s,        'center'),
             (data_at_val if HAS_DATA_AT else 'N/D', 'center'),
             (_fmt_uptime(row.get('Uptime')),           'center'),
+            (str(row.get('Antivírus', '') or '—'),     'left'),
             (versao_val  if HAS_VERSAO  else 'N/D', 'center'),
         ]
         ci = 1
@@ -716,6 +722,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
             (str(row.get('_alerta_ram',  '')),          'ram'),
             (str(row.get('_alerta_cpu',  '')),          'cpu'),
             (str(row.get('_alerta_uptime', '')),        'uptime'),
+            (str(row.get('_alerta_antivirus', '')),    'antivirus'),
         ]
         for v, color_key in alert_vals:
             bg, fc = ALERT_COLORS[color_key]
