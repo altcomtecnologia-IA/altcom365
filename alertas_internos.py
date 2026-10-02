@@ -333,6 +333,18 @@ def calcular_alertas(df, versao_ref=None):
     else:
         df['_alerta_uptime'] = ""
 
+    # 7. Antivírus ausente
+    _SEM_AV = {'', 'nan', 'none', 'nao possui', 'não possui', 'nao tem', 'não tem',
+               'nenhum', 'none', 'no', 'nao', 'não', 'desabilitado', 'disabled'}
+    if 'ANTIVÍRUS' in df.columns:
+        df['_alerta_antivirus'] = df['ANTIVÍRUS'].apply(
+            lambda v: "Sem antivírus — instalar"
+            if str(v).strip().lower() in _SEM_AV or pd.isna(v) if isinstance(v, float) else False
+            else ""
+        )
+    else:
+        df['_alerta_antivirus'] = ""
+
     # Flag geral
     df['_tem_alerta'] = (
         (df['_alerta_armazenamento'].str.len() > 0) |
@@ -341,7 +353,8 @@ def calcular_alertas(df, versao_ref=None):
         (df['_alerta_milvus'].str.len()        > 0) |
         (df['_alerta_ram'].str.len()           > 0) |
         (df['_alerta_cpu'].str.len()           > 0) |
-        (df['_alerta_uptime'].str.len()        > 0)
+        (df['_alerta_uptime'].str.len()        > 0) |
+        (df['_alerta_antivirus'].str.len()     > 0)
     )
     return df
 
@@ -390,7 +403,8 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
     n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
     n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
     n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
-    n_uptime  = int(((df_a.get('_alerta_uptime', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_uptime  = int(((df_a.get('_alerta_uptime',    pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_av      = int(((df_a.get('_alerta_antivirus', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
     n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
 
     milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
@@ -412,6 +426,7 @@ def resumo_alertas(df_com_alertas, versao_ref=None,
             'ram_alerta':     n_ram,
             'cpu_alerta':     n_cpu,
             'uptime_alerta':  n_uptime,
+            'antivirus_alerta': n_av,
             'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
             'tem_versao':     versao_ref is not None,
         },
