@@ -339,7 +339,7 @@ def calcular_alertas(df, versao_ref=None):
     if 'ANTIVÍRUS' in df.columns:
         df['_alerta_antivirus'] = df['ANTIVÍRUS'].apply(
             lambda v: "Sem antivírus — instalar"
-            if str(v).strip().lower() in _SEM_AV or pd.isna(v) if isinstance(v, float) else False
+            if (str(v).strip().lower() in _SEM_AV or (isinstance(v, float) and pd.isna(v)))
             else ""
         )
     else:
