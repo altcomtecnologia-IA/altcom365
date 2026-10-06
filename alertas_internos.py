@@ -293,12 +293,15 @@ def calcular_alertas(df, versao_ref=None):
 
     # 4. Agente Milvus desatualizado (opcional)
     if versao_ref and 'VERSÃO DO CLIENT' in df.columns:
+        VERSAO_MINIMA = (113, 0, 0, 0)  # 113+ considerado atualizado
         def _milvus_alerta(v):
             s = _normalizar_versao(str(v).strip())
             if s in ('', 'nan', 'Não possui'):
                 return ""
-            # Alerta para qualquer versao diferente da referencia (mais antiga OU mais nova)
-            return f"Desatualizada ({s}) -- atualizar" if s != str(versao_ref) else ""
+            t = _ver_tuple(s)
+            if t is None:
+                return f"Versão inválida ({s}) — reinstalar agente"
+            return f"Desatualizada ({s}) — atualizar para 114" if t < VERSAO_MINIMA else ""
         df['_alerta_milvus'] = df['VERSÃO DO CLIENT'].apply(_milvus_alerta)
     else:
         df['_alerta_milvus'] = ""
