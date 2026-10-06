@@ -140,6 +140,13 @@ def parse_cpu(proc: str) -> tuple:
             gen = first2 if first2 in range(10, 15) else int(model[0])
         return f'i{mm.group(1)}', gen, mm.group(3)
 
+    # Intel Core Ultra (Meteor Lake / Arrow Lake): "Ultra 5 125H", "Ultra 7 155H"
+    um = re.search(r'ultra.{1,3}([579]).{0,3}([0-9])[0-9]{2}', p)
+    if um:
+        series = um.group(1)   # '5', '7' ou '9'
+        gen    = int(um.group(2))  # 1=Meteor Lake, 2=Arrow Lake
+        return f'ultra{series}', gen, ''
+
     return 'unknown', 0, ''
 
 def base_tier(dev: str, proc: str) -> int:
@@ -152,6 +159,10 @@ def base_tier(dev: str, proc: str) -> int:
     # Intel N-series
     if familia == 'n-series': return 0           # N100/N200 = CRÍTICO
     if familia == 'n-series-capable': return 2   # N300/N305 = BOM
+
+    # Intel Core Ultra 1ª gen (Meteor Lake) e 2ª gen (Arrow Lake) = EXCELENTE
+    if familia.startswith('ultra'):
+        return 4
 
     if familia == 'unknown' or gen == 0: return 0
 
