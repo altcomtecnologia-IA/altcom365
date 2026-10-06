@@ -219,12 +219,9 @@ def classify(row) -> pd.Series:
         })
 
     # ── Requisito EXCELENTE: 16GB + SSD>=480 → se não atingir, rebaixa tier ─
-    if tier == 4 and (ram < 16 or storage < 480):
+    if tier == 4 and (ram < 16 or storage < 450):
         tier = 3   # rebaixa para ÓTIMO (permanente — não promove de volta)
 
-    # ── Promoção ÓTIMO→EXCELENTE por RAM: só se tier BASE era 3 ─────────────
-    if tier == 3 and tier_base_val == 3 and not is_boost and ram >= 16:
-        tier = 4
 
     # ── Downgrade de 8 GB RAM ──────────────────────────────────────────────────
     # 8 GB passou a ser insuficiente para uso corporativo.
