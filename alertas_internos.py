@@ -373,7 +373,22 @@ def calcular_alertas(df, versao_ref=None):
             raw = placa_prod
         else:
             return ''
-        raw = re.sub(r'([^_ ]+)_\1
+        # Remove trailing duplicate suffix (e.g., "X515JA_X515JA" → "X515JA")
+        last_underscore = raw.rfind('_')
+        if last_underscore > 0:
+            suffix = raw[last_underscore + 1:]
+            prefix = raw[:last_underscore]
+            if prefix.endswith('_' + suffix) or prefix == suffix:
+                raw = prefix
+        raw = re.sub(r'-[A-Z][0-9]{4}[A-Z]$', '', raw)
+        raw = re.sub(r'/.*$', '', raw)
+        raw = raw.replace('_', ' ')
+        return raw.strip()
+
+    df['_modelo'] = df.apply(_modelo_display, axis=1)
+
+    return df
+
 
 def resumo_alertas(df_com_alertas, versao_ref=None,
                    n_desatualizadas=0, pct_desatualizadas=0.0):
