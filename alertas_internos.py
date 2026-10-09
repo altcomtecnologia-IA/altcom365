@@ -11,6 +11,7 @@ V11: Nova regra de versao de referencia (semver):
   3. Referência = maior versão com >= 3 ocorrências
   4. Fallback: moda (regra V10)
 """
+import re
 import pandas as pd
 
 # -- Helpers de parse --
@@ -359,6 +360,264 @@ def calcular_alertas(df, versao_ref=None):
         (df['_alerta_uptime'].str.len()        > 0) |
         (df['_alerta_antivirus'].str.len()     > 0)
     )
+
+    # 8. Modelo do equipamento — combina MODELO DO NOTEBOOK e PLACA MÃE (PRODUTO)
+    _NULOS_MODELO = {'', 'nan', 'none', 'não possui', 'nao possui'}
+
+    def _modelo_display(row):
+        mod_note   = str(row.get('MODELO DO NOTEBOOK', '') or '').strip()
+        placa_prod = str(row.get('PLACA MÃE (PRODUTO)', '') or '').strip()
+        if mod_note.lower() not in _NULOS_MODELO:
+            raw = mod_note
+        elif placa_prod.lower() not in _NULOS_MODELO:
+            raw = placa_prod
+        else:
+            return ''
+        raw = re.sub(r'([^_ ]+)_\1
+
+def resumo_alertas(df_com_alertas, versao_ref=None,
+                   n_desatualizadas=0, pct_desatualizadas=0.0):
+    """
+    Retorna dict com contadores para o preview do frontend.
+    df_com_alertas deve ter passado por calcular_alertas() e ter as colunas
+    _alerta_* e _uso_pct, alem das colunas esperadas pelo engine.
+    """
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from engine_altcom365 import classify, BADGE_COLORS
+
+    total = len(df_com_alertas)
+    if total == 0:
+        return {}
+
+    results        = df_com_alertas.apply(classify, axis=1)
+    classif_series = results['Classificação']
+
+    order  = ["EXCELENTE", "ÓTIMO", "BOM", "SATISFATÓRIO", "CRÍTICO"]
+    resumo = []
+    for cat in order:
+        qtd = int((classif_series == cat).sum())
+        if qtd == 0:
+            continue
+        mask_cat = classif_series == cat
+        mp = int(results.loc[mask_cat, 'Badge'].str.contains('Man. Prev.').sum())
+        up = int(results.loc[mask_cat, 'Badge'].str.contains('Upgrade').sum())
+        bg, fg = BADGE_COLORS[cat]
+        resumo.append({
+            'label': cat, 'qtd': qtd, 'pct': round(qtd / total * 100),
+            'man_prev': mp, 'upgrade': up, 'bg': bg, 'fg': fg,
+        })
+
+    df_a = df_com_alertas
+    mask_nao_critico = classif_series != 'CRÍTICO'
+
+    n_armaz   = int(((df_a['_alerta_armazenamento'].str.len() > 0) & mask_nao_critico).sum())
+    n_win     = int(((df_a['_alerta_windows'].str.len()       > 0) & mask_nao_critico).sum())
+    n_contato = int(((df_a['_alerta_sem_contato'].str.len()   > 0) & mask_nao_critico).sum())
+    n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
+    n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_uptime  = int(((df_a.get('_alerta_uptime',    pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_av      = int(((df_a.get('_alerta_antivirus', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
+
+    milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
+    milvus_label = (
+        "Solicitar push à Milvus"
+        if pct_desatualizadas > 10
+        else "Atualização interna pela equipe Altcom"
+    )
+
+    return {
+        'total':  total,
+        'resumo': resumo,
+        'alertas': {
+            'armazenamento':  n_armaz,
+            'windows':        n_win,
+            'sem_contato':    n_contato,
+            'milvus':         n_milvus,
+            'laudados_troca': n_troca,
+            'ram_alerta':     n_ram,
+            'cpu_alerta':     n_cpu,
+            'uptime_alerta':  n_uptime,
+            'antivirus_alerta': n_av,
+            'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
+            'tem_versao':     versao_ref is not None,
+        },
+        'milvus_info': {
+            'versao_ref':       versao_ref,
+            'n_desatualizadas': n_desatualizadas,
+            'pct':              pct_desatualizadas,
+            'badge':            milvus_badge,
+            'label':            milvus_label,
+        },
+    }
+, r'\1', raw)       # remove sufixo duplicado: X123_X123 -> X123
+        raw = re.sub(r'-[A-Z][0-9]{4}[A-Z]
+
+def resumo_alertas(df_com_alertas, versao_ref=None,
+                   n_desatualizadas=0, pct_desatualizadas=0.0):
+    """
+    Retorna dict com contadores para o preview do frontend.
+    df_com_alertas deve ter passado por calcular_alertas() e ter as colunas
+    _alerta_* e _uso_pct, alem das colunas esperadas pelo engine.
+    """
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from engine_altcom365 import classify, BADGE_COLORS
+
+    total = len(df_com_alertas)
+    if total == 0:
+        return {}
+
+    results        = df_com_alertas.apply(classify, axis=1)
+    classif_series = results['Classificação']
+
+    order  = ["EXCELENTE", "ÓTIMO", "BOM", "SATISFATÓRIO", "CRÍTICO"]
+    resumo = []
+    for cat in order:
+        qtd = int((classif_series == cat).sum())
+        if qtd == 0:
+            continue
+        mask_cat = classif_series == cat
+        mp = int(results.loc[mask_cat, 'Badge'].str.contains('Man. Prev.').sum())
+        up = int(results.loc[mask_cat, 'Badge'].str.contains('Upgrade').sum())
+        bg, fg = BADGE_COLORS[cat]
+        resumo.append({
+            'label': cat, 'qtd': qtd, 'pct': round(qtd / total * 100),
+            'man_prev': mp, 'upgrade': up, 'bg': bg, 'fg': fg,
+        })
+
+    df_a = df_com_alertas
+    mask_nao_critico = classif_series != 'CRÍTICO'
+
+    n_armaz   = int(((df_a['_alerta_armazenamento'].str.len() > 0) & mask_nao_critico).sum())
+    n_win     = int(((df_a['_alerta_windows'].str.len()       > 0) & mask_nao_critico).sum())
+    n_contato = int(((df_a['_alerta_sem_contato'].str.len()   > 0) & mask_nao_critico).sum())
+    n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
+    n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_uptime  = int(((df_a.get('_alerta_uptime',    pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_av      = int(((df_a.get('_alerta_antivirus', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
+
+    milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
+    milvus_label = (
+        "Solicitar push à Milvus"
+        if pct_desatualizadas > 10
+        else "Atualização interna pela equipe Altcom"
+    )
+
+    return {
+        'total':  total,
+        'resumo': resumo,
+        'alertas': {
+            'armazenamento':  n_armaz,
+            'windows':        n_win,
+            'sem_contato':    n_contato,
+            'milvus':         n_milvus,
+            'laudados_troca': n_troca,
+            'ram_alerta':     n_ram,
+            'cpu_alerta':     n_cpu,
+            'uptime_alerta':  n_uptime,
+            'antivirus_alerta': n_av,
+            'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
+            'tem_versao':     versao_ref is not None,
+        },
+        'milvus_info': {
+            'versao_ref':       versao_ref,
+            'n_desatualizadas': n_desatualizadas,
+            'pct':              pct_desatualizadas,
+            'badge':            milvus_badge,
+            'label':            milvus_label,
+        },
+    }
+, '', raw)     # remove codigo config: -B0911H
+        raw = re.sub(r'/.*
+
+def resumo_alertas(df_com_alertas, versao_ref=None,
+                   n_desatualizadas=0, pct_desatualizadas=0.0):
+    """
+    Retorna dict com contadores para o preview do frontend.
+    df_com_alertas deve ter passado por calcular_alertas() e ter as colunas
+    _alerta_* e _uso_pct, alem das colunas esperadas pelo engine.
+    """
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from engine_altcom365 import classify, BADGE_COLORS
+
+    total = len(df_com_alertas)
+    if total == 0:
+        return {}
+
+    results        = df_com_alertas.apply(classify, axis=1)
+    classif_series = results['Classificação']
+
+    order  = ["EXCELENTE", "ÓTIMO", "BOM", "SATISFATÓRIO", "CRÍTICO"]
+    resumo = []
+    for cat in order:
+        qtd = int((classif_series == cat).sum())
+        if qtd == 0:
+            continue
+        mask_cat = classif_series == cat
+        mp = int(results.loc[mask_cat, 'Badge'].str.contains('Man. Prev.').sum())
+        up = int(results.loc[mask_cat, 'Badge'].str.contains('Upgrade').sum())
+        bg, fg = BADGE_COLORS[cat]
+        resumo.append({
+            'label': cat, 'qtd': qtd, 'pct': round(qtd / total * 100),
+            'man_prev': mp, 'upgrade': up, 'bg': bg, 'fg': fg,
+        })
+
+    df_a = df_com_alertas
+    mask_nao_critico = classif_series != 'CRÍTICO'
+
+    n_armaz   = int(((df_a['_alerta_armazenamento'].str.len() > 0) & mask_nao_critico).sum())
+    n_win     = int(((df_a['_alerta_windows'].str.len()       > 0) & mask_nao_critico).sum())
+    n_contato = int(((df_a['_alerta_sem_contato'].str.len()   > 0) & mask_nao_critico).sum())
+    n_milvus  = int(((df_a['_alerta_milvus'].str.len()        > 0) & mask_nao_critico).sum())
+    n_ram     = int(((df_a.get('_alerta_ram',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_cpu     = int(((df_a.get('_alerta_cpu',  pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_uptime  = int(((df_a.get('_alerta_uptime',    pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_av      = int(((df_a.get('_alerta_antivirus', pd.Series([''] * len(df_a))).str.len() > 0) & mask_nao_critico).sum())
+    n_troca   = int((df_a['_tem_alerta'] & (classif_series == 'CRÍTICO')).sum())
+
+    milvus_badge = "yellow" if pct_desatualizadas > 10 else "blue"
+    milvus_label = (
+        "Solicitar push à Milvus"
+        if pct_desatualizadas > 10
+        else "Atualização interna pela equipe Altcom"
+    )
+
+    return {
+        'total':  total,
+        'resumo': resumo,
+        'alertas': {
+            'armazenamento':  n_armaz,
+            'windows':        n_win,
+            'sem_contato':    n_contato,
+            'milvus':         n_milvus,
+            'laudados_troca': n_troca,
+            'ram_alerta':     n_ram,
+            'cpu_alerta':     n_cpu,
+            'uptime_alerta':  n_uptime,
+            'antivirus_alerta': n_av,
+            'tem_data_at':    'DATA DE ATUALIZAÇÃO' in df_a.columns,
+            'tem_versao':     versao_ref is not None,
+        },
+        'milvus_info': {
+            'versao_ref':       versao_ref,
+            'n_desatualizadas': n_desatualizadas,
+            'pct':              pct_desatualizadas,
+            'badge':            milvus_badge,
+            'label':            milvus_label,
+        },
+    }
+, '', raw)                       # remove variante: 270E5J/2570EJ -> 270E5J
+        raw = raw.replace('_', ' ')
+        return raw.strip()
+
+    df['_modelo'] = df.apply(_modelo_display, axis=1)
+
     return df
 
 
