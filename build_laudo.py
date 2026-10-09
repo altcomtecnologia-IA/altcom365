@@ -47,6 +47,8 @@ COL_MAP_NOVO = {
     'MODELO':                      'Modelo',
     'NÚMERO DO SERIAL':             'Número do serial',
     'PLACA MÃE':                   'Placa mãe',
+    'PLACA MÃE (PRODUTO)':          'Placa mãe (produto)',
+    'MODELO DO NOTEBOOK':           'Modelo do notebook',
     'CPU UTILIZADA':               'CPU utilizada',
     'MEMÓRIA RAM UTILIZADA':       'Memória RAM utilizada',
 }
@@ -329,7 +331,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
 
     # -- ABA 1: LAUDO ---------------------------------------------------------
     ws = wb.active; ws.title = "Laudo"
-    NCOLS = 15
+    NCOLS = 16
 
     title_strip(ws, 1, f"LAUDO DE EFICIÊNCIA TÉCNICA  |  {cliente_nome.upper()}", NCOLS)
     ws.row_dimensions[2].height = 18
@@ -339,7 +341,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
     ws.row_dimensions[3].height = 5
 
-    HEADERS = ['Tipo', 'Dispositivo', 'Marca', 'Nº Serial', 'Apelido', 'Usuário Logado',
+    HEADERS = ['Tipo', 'Dispositivo', 'Marca', 'Modelo', 'Nº Serial', 'Apelido', 'Usuário Logado',
                'S.O.', 'Processador', 'RAM', 'Armazenamento', 'Uso %',
                'Classificação', 'Descritivo', 'Durabilidade', 'Sugestão']
     ws.row_dimensions[4].height = 22
@@ -365,12 +367,14 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         apelido      = str(row.get('Apelido', '')) or '—'
         usuario      = str(row.get('Usuário logado', '')) or '—'
         marca        = str(row.get('Placa mãe', '')) or '—'
+        modelo       = str(row.get('_modelo', '') or '—')
         serial       = str(row.get('Número do serial', '')) or '—'
 
         vals = [
             (tipo_label,                            'center'),
             (str(row.get('Nome do dispositivo', '')), 'left'),
             (marca,  'left'),
+            (modelo, 'left'),
             (serial,  'left'),
             (apelido,                                'left'),
             (usuario,                                'left'),
@@ -386,7 +390,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
         ]
 
         for ci, (v, ha) in enumerate(vals, 1):
-            if ci == 12:  # Classificação — badge colorido
+            if ci == 13:  # Classificação — badge colorido
                 c = ws.cell(row=r, column=ci, value=v)
                 fill, font = badge_style(classif_base)
                 c.fill = fill; c.font = font
@@ -395,7 +399,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
             else:
                 dat(ws, r, ci, v, z=z, ha=ha)
 
-    for i, w in enumerate([10, 20, 18, 16, 14, 16, 26, 36, 8, 14, 7, 20, 50, 12, 30], 1):
+    for i, w in enumerate([10, 20, 18, 20, 16, 14, 16, 26, 36, 8, 14, 7, 20, 50, 12, 30], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A5'
 
