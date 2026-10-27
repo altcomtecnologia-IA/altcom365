@@ -152,9 +152,12 @@ def parse_cpu(proc: str) -> tuple:
 def base_tier(dev: str, proc: str) -> int:
     familia, gen, _ = parse_cpu(proc)
 
-    # AMD Ryzen 5000+ = ÓTIMO; outros = BOM
+    # AMD Ryzen: Ryzen 7/9 5000+ = EXCELENTE; Ryzen 5 5000+ = ÓTIMO; outros = BOM
     if familia.startswith('ryzen'):
-        return 3 if gen >= 5 else 2
+        if gen >= 5:
+            num = int(familia.replace('ryzen', ''))   # 3, 5, 7, 9
+            return 4 if num >= 7 else 3
+        return 2
 
     # Intel N-series
     if familia == 'n-series': return 0           # N100/N200 = CRÍTICO
