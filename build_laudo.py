@@ -454,7 +454,7 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws3.row_dimensions[2].height = 5
     legend_rows = [
         ("Classificação", "Critério base", "Sufixo / Ação"),
-        ("EXCELENTE",    "CPU 13ª geração ou superior (ou equiv.) + 16 GB RAM + SSD ≥ 256 GB + Windows 11 + Uso do disco ≤ 70%", "—"),
+        ("EXCELENTE",    "CPU 13ª geração ou superior (ou equiv.) + 16 GB RAM + SSD ≥ 240 GB + Windows 11 + Uso do disco ≤ 70%", "—"),
         ("ÓTIMO",        "CPU moderna + requisitos mínimos atendidos", "—"),
         ("BOM",          "CPU intermediária superior + requisitos mínimos", "—"),
         ("SATISFATÓRIO", "CPU intermediária inferior ou requisitos parciais", "—"),
