@@ -1,10 +1,19 @@
 """
-Altcom 365 – Engine de Classificação de Eficiência Técnica v5
+Altcom 365 – Engine de Classificação de Eficiência Técnica v6
 Fonte: Tabela_de_processadores_para_laudo_de_eficiencia_2026.xlsx (revisada)
+
 Regras de sufixo:
   - Uso armazenamento >90%    → classif + " - Man. Prev." (cor inalterada)
+  - Uso armazenamento 70-90%  → classif + " - Arm. Alto"  (cap em ÓTIMO)
   - SO<Win11 / RAM<8 / SSD<200 → classif + " - Upgrade"   (cor inalterada)
   - Ambos                     → " - Upgrade" tem prioridade
+
+Changelog v6 (2026-10-27):
+  - SSD deixa de ser barreira de tier: limiar baixou de 450 GB para SSD_MIN_EXCELENTE
+    (256 GB comercial ≈ 230 GB reportado). Capacidade permanece nos sufixos de armazenamento.
+  - Novo critério para EXCELENTE: uso do disco ≤ USO_MAX_EXCELENTE (70 %).
+  - Uso 70–90 %: tier cap em ÓTIMO + sufixo "- Arm. Alto" visível no badge.
+  - Constantes parametrizadas no topo do arquivo.
 """
 import re, pandas as pd
 
@@ -12,12 +21,12 @@ import re, pandas as pd
 # CORES OFICIAIS (extraídas da planilha)
 # ══════════════════════════════════════════════════════════════════════════════
 BADGE_COLORS = {
-    "CRÍTICO":      ("C00000", "FFFFFF"),   # vermelho escuro / texto branco
-    "SATISFATÓRIO":        ("FFC000", "000000"),   # amarelo / texto preto
+    "CRÍTICO":              ("C00000", "FFFFFF"),   # vermelho escuro / texto branco
+    "SATISFATÓRIO":         ("FFC000", "000000"),   # amarelo / texto preto
     "SATISFATÓRIO-Upgrade": ("FFC000", "000000"),   # SATISFATÓRIO + RAM 8 GB
-    "BOM":          ("92D050", "000000"),   # verde claro / texto preto
-    "ÓTIMO":        ("00B050", "FFFFFF"),   # verde escuro / texto branco
-    "EXCELENTE":    ("00B0F0", "000000"),   # azul / texto preto
+    "BOM":                  ("92D050", "000000"),   # verde claro / texto preto
+    "ÓTIMO":                ("00B050", "FFFFFF"),   # verde escuro / texto branco
+    "EXCELENTE":            ("00B0F0", "000000"),   # azul / texto preto
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -35,7 +44,7 @@ TIER_TABLE = {
     ('notebook','i5', 7): 0,
     ('notebook','i5', 8): 1, ('notebook','i5', 9): 1,
     ('notebook','i5',10): 2,
-    ('notebook','i5',11): 2,   # REVISADO: era ÓTIMO, agora BOM (tabela mai/26)
+    ('notebook','i5',11): 2,   # REVISADO: era ÔTIMO, agora BOM (tabela mai/26)
     ('notebook','i5',12): 3,   # REVISADO: era BOM, agora ÓTIMO
     ('notebook','i5',13): 4,
 
@@ -55,7 +64,7 @@ TIER_TABLE = {
     ('desktop','i3',12): 3,
     ('desktop','i3',13): 4,
 
-    # ── DESKTOP i5 ───────────────────────────────────────────────────────────
+    # ── DESKTOP i5 ──────────────────────────────────────────────────────────
     ('desktop','i5', 6): 0,
     ('desktop','i5', 7): 1, ('desktop','i5', 8): 1, ('desktop','i5', 9): 1,
     ('desktop','i5',10): 2,
@@ -78,6 +87,15 @@ PRECO_WIN11   = "R$ 145,00"
 PRECO_RAM_8   = "R$ 120,00 (módulo 8 GB)"
 PRECO_RAM_16  = "R$ 180,00 (módulo 8 GB DDR4 — upgrade para 16 GB)"
 PRECO_SSD_240 = "R$ 180,00 (SSD 240 GB)"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIMIARES DE TIER (parametrizáveis — altere aqui, nunca inline)
+# ══════════════════════════════════════════════════════════════════════════════
+SSD_MIN_EXCELENTE   = 230   # GB reportado ≈ 256 GB comercial (binário: ~237–238 GB)
+                             # Analogia: limiar 450 GB captura discos de 512 GB (~456–476 GB)
+SSD_MIN_RECOMENDADO = 200   # GB — abaixo → sufixo "- Upgrade" (comportamento inalterado)
+USO_MAX_EXCELENTE   = 70.0  # % — acima disso, EXCELENTE é impedido (cap em ÓTIMO)
+USO_MAX_MANUTENCAO  = 90.0  # % — acima disso → sufixo "- Man. Prev." (comportamento inalterado)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPERS
@@ -221,10 +239,18 @@ def classify(row) -> pd.Series:
             'Preços':                PRECO_SUBST,
         })
 
-    # ── Requisito EXCELENTE: 16GB + SSD>=480 → se não atingir, rebaixa tier ─
-    if tier == 4 and (ram < 16 or storage < 450):
+    # ── Requisito EXCELENTE: 16 GB RAM + SSD ≥ 256 GB comercial (~230 GB reportado) ──
+    # Nota: o TAMANHO do SSD apenas impede EXCELENTE se < SSD_MIN_EXCELENTE.
+    # Capacidade insuficiente continua gerando sufixo "- Upgrade" (storage < SSD_MIN_RECOMENDADO).
+    if tier == 4 and (ram < 16 or storage < SSD_MIN_EXCELENTE):
         tier = 3   # rebaixa para ÓTIMO (permanente — não promove de volta)
 
+    # ── Uso 70–90 %: impede EXCELENTE (cap em ÓTIMO) ─────────────────────────
+    # Uso > 90 % gera sufixo Man. Prev. abaixo e NÃO rebaixa o tier por si só.
+    uso_cap_arm = (uso is not None
+                   and USO_MAX_EXCELENTE < uso <= USO_MAX_MANUTENCAO)
+    if tier == 4 and uso_cap_arm:
+        tier = 3   # rebaixa para ÓTIMO; aviso visível no badge abaixo
 
     # ── Downgrade de 8 GB RAM ──────────────────────────────────────────────────
     # 8 GB passou a ser insuficiente para uso corporativo.
@@ -239,15 +265,16 @@ def classify(row) -> pd.Series:
     classif_base = TIER_LABELS[tier]
 
     # ── Penalidades: detectar situações que geram sufixo ─────────────────────
-    # Uso >90%    → "- Man. Prev."
-    # SO/RAM/SSD  → "- Upgrade"
-    # Upgrade tem prioridade sobre Man. Prev.
-    uso_alto = uso is not None and uso > 90
+    # Uso>90%    → "- Man. Prev."
+    # Uso 70-90%  in "- Arm. Alto"  (somente se não houver Man. Prev.)
+    # SO/RAM/SSD → "- Upgrade"
+    # Upgrade tem prioridade sobre Man. Prev. / Arm. Alto
+    uso_alto = uso is not None and uso > USO_MAX_MANUTENCAO
 
     pen_upgrade = []
     if win_old:       pen_upgrade.append(('so',  "Necessário fazer upgrade para Windows 11."))
     if ram < 8:       pen_upgrade.append(('ram', "Memória RAM abaixo do mínimo recomendado (8 GB)."))
-    if storage < 200: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (220 GB)."))
+    if storage < SSD_MIN_RECOMENDADO: pen_upgrade.append(('ssd', "Armazenamento abaixo do mínimo recomendado (220 GB)."))
 
     if ram8_downgrade and tier == 1:
         # SATISFATÓRIO com RAM 8 GB → badge especial (não caiu para CRÍTICO)
@@ -256,6 +283,8 @@ def classify(row) -> pd.Series:
         badge = classif_base + " - Upgrade"
     elif uso_alto:
         badge = classif_base + " - Man. Prev."
+    elif uso_cap_arm:
+        badge = classif_base + " - Arm. Alto"
     else:
         badge = classif_base
 
@@ -284,7 +313,7 @@ def classify(row) -> pd.Series:
         elif tipo_p == 'ssd':
             sugs.append("Substituição/adição SSD 240 GB"); precs.append(PRECO_SSD_240)
 
-    # Texto de uso alto
+    # Texto de uso alto (>90%)
     if uso_alto:
         if uso is not None and uso >= 95:
             desc.append("Armazenamento em nível crítico — limpeza urgente necessária.")
@@ -292,6 +321,11 @@ def classify(row) -> pd.Series:
         else:
             desc.append("Manutenção preventiva de armazenamento recomendada.")
             sugs.append("Preventiva de armazenamento")
+
+    # Texto de armazenamento alto (70–90 %)
+    if uso_cap_arm and uso is not None:
+        desc.append(f"Uso de armazenamento elevado ({uso:.1f}%) — recomenda-se limpeza.")
+        sugs.append("Limpeza/organização de armazenamento")
 
     return pd.Series({
         'Classificação':         classif_base,   # para lookup de cor
@@ -301,4 +335,3 @@ def classify(row) -> pd.Series:
         'Sugestão':              "\n".join(sugs) if sugs else "NA",
         'Preços':                " | ".join(precs) if precs else "NA",
     })
-
