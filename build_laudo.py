@@ -18,7 +18,9 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_altcom365 import (classify, device_type, parse_uso, parse_storage,
-                               parse_ram, is_win_old, BADGE_COLORS)
+                               parse_ram, is_win_old, BADGE_COLORS,
+                               SSD_MIN_EXCELENTE, SSD_MIN_RECOMENDADO,
+                               USO_MAX_EXCELENTE, USO_MAX_MANUTENCAO)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -256,20 +258,23 @@ def _motivos_upgrade(row):
 
 def _badge_cliente(row):
     """Badge para o laudo cliente.
-    '- Upgrade' por SO apenas + uso <= 70% → classificação base (sem sufixo).
-    '- Upgrade' por SO apenas + uso > 70%  → classif + '- Man. Prev.' (uso alto é visível ao cliente).
+    '- Upgrade' por SO apenas + uso <= USO_MAX_EXCELENTE → classificação base (sem sufixo).
+    '- Upgrade' por SO apenas + 70% < uso <= 90%         → classif + '- Arm. Alto'.
+    '- Upgrade' por SO apenas + uso > 90%                → classif + '- Man. Prev.'.
     '- Upgrade' por RAM/SSD (com ou sem SO) → mantém '- Upgrade'.
-    '- Man. Prev.' e CRÍTICO               → mantidos sem alteração.
+    '- Man. Prev.', '- Arm. Alto' e CRÍTICO → mantidos sem alteração.
     """
     badge        = str(row.get('Badge', ''))
     classif_base = str(row.get('Classificação', badge))
     if '- Upgrade' in badge:
         motivos = _motivos_upgrade(row)
         if motivos == ['so']:
-            # Win 10 é o único motivo — verifica uso de armazenamento
+            # Win 10 é o único motivo — substitui sufixo pelo estado do armazenamento
             uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
-            if uso is not None and uso > 70:
+            if uso is not None and uso > USO_MAX_MANUTENCAO:
                 return classif_base + ' - Man. Prev.'
+            if uso is not None and uso > USO_MAX_EXCELENTE:
+                return classif_base + ' - Arm. Alto'
             return classif_base
     return badge
 
@@ -449,15 +454,17 @@ def build_laudo_cliente(df, output_path, cliente_nome=None):
     ws3.row_dimensions[2].height = 5
     legend_rows = [
         ("Classificação", "Critério base", "Sufixo / Ação"),
-        ("EXCELENTE",    "CPU topo de linha + 16 GB RAM + SSD ≥ 480 GB + Win 11", "—"),
+        ("EXCELENTE",    "CPU 13ª geração ou superior (ou equiv.) + 16 GB RAM + SSD ≥ 256 GB + Windows 11 + Uso do disco ≤ 70%", "—"),
         ("ÓTIMO",        "CPU moderna + requisitos mínimos atendidos", "—"),
         ("BOM",          "CPU intermediária superior + requisitos mínimos", "—"),
         ("SATISFATÓRIO", "CPU intermediária inferior ou requisitos parciais", "—"),
         ("CRÍTICO",      "CPU obsoleta — substituição necessária", "—"),
         ("",             "", ""),
-        ("Sufixo",       "Condição",                       "Ação recomendada"),
-        ("- Upgrade",    "RAM < 8 GB ou SSD < 200 GB",        "Upgrade de componente"),
-        ("SATISFATÓRIO-Upgrade", "SATISFATÓRIO com RAM de 8 GB", "Upgrade de RAM para 16 GB"),
+        ("Sufixo",       "Condição",                                           "Ação recomendada"),
+        ("- Upgrade",    "RAM < 8 GB ou SSD < 200 GB ou SO desatualizado",    "Upgrade de componente"),
+        ("- Man. Prev.", "Uso do disco > 90%",                                 "Manutenção preventiva de armazenamento"),
+        ("- Arm. Alto",  "Uso do disco entre 70% e 90% (cap em ÓTIMO)",       "Limpeza/organização de armazenamento recomendada"),
+        ("SATISFATÓRIO-Upgrade", "SATISFATÓRIO com RAM de 8 GB",              "Upgrade de RAM para 16 GB"),
     ]
     for ri, (a, b, c_val) in enumerate(legend_rows, 3):
         ws3.row_dimensions[ri].height = 22
@@ -574,7 +581,7 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
     hoje_str = hoje.strftime('%d/%m/%y %H:%M')
 
     if cliente_nome is None:
-        cliente_nome = (str(df['Cliente'].iloc[0]).strip()
+        cliente_nome = (str(df['Cliente'].iloc[0]).st2ip()
                         if 'Cliente' in df.columns else "Cliente")
 
     HAS_DATA_AT   = 'Data de atualização' in df.columns
@@ -584,12 +591,17 @@ def build_relatorio_interno(df, output_path, cliente_nome=None, versao_ref=None,
     results  = df.apply(classify, axis=1)
     df_out   = pd.concat([df.reset_index(drop=True), results.reset_index(drop=True)], axis=1)
 
-    # -- Calcula alertas inline se não vieram pré-computados ------------------
+    # -- Calcula alertas inline se não vieram prä-computados ------------------
     if not HAS_ALERTAS:
         hoje_ts = hoje
         def _inline_alerts(row):
             uso = parse_uso(row.get('Armazenamento utilizado', 'NaN%'))
-            al_arm = f"Preventiva — uso {uso:.1f}%" if (uso and uso > 90) else ""
+            if uso and uso > USO_MAX_MANUTENCAO:
+                al_arm = f"Preventiva — uso {uso:.1f}%"
+            elif uso and uso > USO_MAX_EXCELENTE:
+                al_arm = f"Arm. Alto — uso {uso:.1f}%"
+            else:
+                al_arm = ""
             so = str(row.get('Sistema operacional', '')).lower()
             al_win = "Upgrade para Win 11" if 'windows 10' in so else ""
             al_sc = ""
