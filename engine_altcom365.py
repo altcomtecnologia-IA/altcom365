@@ -91,8 +91,8 @@ PRECO_SSD_240 = "R$ 180,00 (SSD 240 GB)"
 # ══════════════════════════════════════════════════════════════════════════════
 # LIMIARES DE TIER (parametrizáveis — altere aqui, nunca inline)
 # ══════════════════════════════════════════════════════════════════════════════
-SSD_MIN_EXCELENTE   = 230   # GB reportado ≈ 256 GB comercial (binário: ~237–238 GB)
-                             # Analogia: limiar 450 GB captura discos de 512 GB (~456–476 GB)
+SSD_MIN_EXCELENTE   = 220   # GB reportado ≈ 240 GB comercial (binário: ~224 GB)
+                             # Limiar 220 captura SSDs de 240/250 GB comerciais (~224–233 GB reportado)
 SSD_MIN_RECOMENDADO = 200   # GB — abaixo → sufixo "- Upgrade" (comportamento inalterado)
 USO_MAX_EXCELENTE   = 70.0  # % — acima disso, EXCELENTE é impedido (cap em ÓTIMO)
 USO_MAX_MANUTENCAO  = 90.0  # % — acima disso → sufixo "- Man. Prev." (comportamento inalterado)
